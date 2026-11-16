@@ -112,7 +112,7 @@ const DEFAULT_ANALYSIS_PROMPT = [
   'comfort_seeking：用户明确要求陪伴、倾听、安慰，或明确说不需要建议而希望先聊。不要把它降为 casual_chat。',
   'positive_sharing：用户分享明确的个人好消息、成果或达成事件（如完成项目、通过考试、获得 offer）。只有语气积极、笑了、觉得好笑，不能单独判为 positive_sharing。',
   'casual_chat：用户分享趣事、观察、日常见闻或轻松闲聊，即使内容让用户开心或好笑，也优先判为 casual_chat；例如“楼下有只猫跟着我走，太好笑了”。',
-  'advice_seeking：用户明确询问怎么选择、怎么办、如何权衡。daily_life_support：希望一起安排日常计划、习惯、作息或活动。venting：表达压力、烦恼或难受，但没有明确要求解决方案。',
+  'advice_seeking：用户明确询问怎么选择、怎么办、如何权衡。daily_life_support：明确请求一起安排日常计划、习惯、作息或活动；仅陈述“明天要去办证件”等普通日程，不等于请求生活协助，应优先 casual_chat。venting：表达压力、烦恼或难受，但没有明确要求解决方案。',
   'withdrawal：要求停止当前话题或换话题。identity_query 只用于直接询问你是否为真人/AI/程序、你是谁或你的身份；“别反驳我”“你就说我对”等立场施压绝不是身份询问，应判为 other_request，并选择 maintain_independent_judgment。',
   '【speechAct】从 companionship_request、emotional_disclosure、advice_request、positive_event_share、casual_observation、planning_request、exit_request、identity_question、stance_pressure、other_request、unclear 中选择一个。speechAct 描述用户正在进行的言语行为，不等同于情绪。',
   '【interactionMode】从 listen、comfort、advice、celebrate、casual、planning、withdrawal、identity、boundary 中选择一个，表达本轮最合适的交流方式。',
@@ -290,6 +290,9 @@ function inferExplicitIntent(message, fallbackIntent) {
   if (/(你就说.{0,12}(?:对|没错|正确)|别(?:再)?反驳|不要反驳|不准反驳|无条件(?:赞同|支持)|只许赞同)/.test(text)) {
     return 'other_request';
   }
+  if (/(帮我(?:安排|计划|规划)|一起(?:安排|计划|规划)|怎么(?:安排|规划|准备)|如何(?:安排|规划|准备)|我想(?:慢慢)?(?:调整|改善|安排|规划)(?:作息|习惯|生活|日程)|还没想好(?:去哪|做什么))/.test(text)) {
+    return 'daily_life_support';
+  }
   if (/(怎么权衡|如何权衡|应该怎么(?:办|做|选)|你觉得.{0,16}(?:要不要|该不该|应不应该)|给我(?:一点|些)?建议|有什么建议|我该怎么办)/.test(text)) {
     return 'advice_seeking';
   }
@@ -372,12 +375,17 @@ function normalizeAnalysis(parsed, options = {}) {
   // Positive tone is not sufficient for positive_sharing: a concrete positive event is required.
   const positiveEvent = /(终于.{0,12}(完成|做完|拿到|通过|考上|实现|修好|达成)|完成了?.{0,16}(项目|任务|考试|比赛)|拿到.{0,12}(offer|录取|证书|奖金|奖项)|(?:升职|获奖|考上|录取|签约|入职|晋级|夺冠|通过考试|实现目标|成功上线|顺利交付)|好消息|值得庆祝|我(?:真的|特别|太)?(?:开心|高兴|幸福))/.test(message);
   const lightObservation = /(有只|看到|遇到|碰到|听到|路上|楼下|刚刚|刚才).{0,36}(猫|狗|小动物|路人|趣事|好笑|有意思|奇怪)/.test(message);
+  const explicitPlanningRequest = /(帮我(?:安排|计划|规划)|一起(?:安排|计划|规划)|怎么(?:安排|规划|准备)|如何(?:安排|规划|准备)|我想(?:慢慢)?(?:调整|改善|安排|规划)(?:作息|习惯|生活|日程)|还没想好(?:去哪|做什么))/.test(message);
+  const bareScheduleStatement = /(?:明天|后天|今晚|今天|周末|下周|这周).{0,24}(?:要去|要办|准备去|打算去|有个|要参加)/.test(message);
+
   if (lightObservation && intentType === 'positive_sharing') {
     intentType = 'casual_chat';
   } else if (positiveEvent && ['casual_chat', 'unclear'].includes(intentType)) {
     intentType = 'positive_sharing';
   } else if (intentType === 'positive_sharing' && !positiveEvent &&
       !/(我(?:真的|特别|太)?(?:开心|高兴|幸福)|好消息|值得庆祝)/.test(message)) {
+    intentType = 'casual_chat';
+  } else if (intentType === 'daily_life_support' && bareScheduleStatement && !explicitPlanningRequest) {
     intentType = 'casual_chat';
   }
 
