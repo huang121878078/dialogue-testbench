@@ -230,6 +230,12 @@ $('userInput').addEventListener('keydown', event => {
   }
 });
 $('saveConfig').addEventListener('click', saveConfig);
+$('resetCompanionDefaults').addEventListener('click', () => {
+  $('systemPrompt').value = DEFAULT_SYSTEM_PROMPT;
+  $('persona').value = DEFAULT_PERSONA;
+  saveConfig();
+  $('status').textContent = '已恢复岚汐默认陪伴模板';
+});
 $('temperature').addEventListener('input', () => $('tempValue').textContent = $('temperature').value);
 $('clearChat').addEventListener('click', () => {
   history = [];
