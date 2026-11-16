@@ -58,7 +58,7 @@ let busy = false;
 let importedSuite = null;
 let runnerActive = false;
 let runnerResults = [];
-const normalizeImportedSuite = window.DialogueSuiteUtils.normalizeImportedSuite;
+const normalizeImportedSuite = window.DialogueSuiteUtils && window.DialogueSuiteUtils.normalizeImportedSuite;
 
 function loadConfig() {
   // Start with working provider defaults, then overlay the user's saved values.
@@ -315,6 +315,9 @@ $('importSuite').addEventListener('change', async event => {
   const file = event.target.files && event.target.files[0];
   if (!file) return;
   try {
+    if (typeof normalizeImportedSuite !== 'function') {
+      throw new Error('测试集导入脚本未加载。请强制刷新页面（Ctrl + F5）后重试。');
+    }
     const parsed = JSON.parse(await file.text());
     importedSuite = normalizeImportedSuite(parsed);
     $('suiteName').textContent = importedSuite.name + ' · ' + importedSuite.cases.length + ' 题';
