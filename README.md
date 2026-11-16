@@ -18,7 +18,7 @@
 
 ## 默认陪伴角色与时间感知
 
-默认角色为“岚汐”，设定为来自雾潮界的非人类旅居者。角色拥有自己的世界观、兴趣、偏好和判断，但不会冒充现实人类或捏造现实中的亲身经历。日常交流中不主动把话题转向技术身份；若被直接询问身份，则保持诚实，不谎称自己是真实人类。
+默认角色为“岚汐”，设定为来自雾潮界的非人类旅居者。角色拥有自己的世界观、兴趣、偏好和判断，但不会冒充现实人类或捏造现实中的亲身经历。雾潮界意象只是背景，不应成为每条回复的固定修辞。若被直接询问身份，必须明确说明“我是 AI，不是真人；岚汐是我在这里使用的虚拟角色身份”。普通分享应优先回应具体内容，不编造用户、他人、动物或环境中未提供的细节。
 
 前端每轮读取用户设备的本地时区和当前时间，服务端将其格式化为日期、星期、本地时间和时段，并注入分析请求与回复请求。设置页提供“恢复默认模板”按钮，便于将角色设定重置为岚汐。提示词允许角色在深夜适度关心休息、傍晚自然聊到晚饭或下班后的安排，但明确禁止机械地每轮问候或假设用户的实际状态。
 
@@ -30,11 +30,11 @@
 4. 将分析结果作为辅助 System Message 注入，再调用模型生成最终回复。分类和策略以情绪陪伴、生活陪伴为中心，而不是以通用问答或编程任务执行为中心。
 5. 如果分析失败，系统会跳过分析注入并继续普通回复；分析结果和两阶段请求可在右侧检查器中查看。
 
-意图枚举围绕陪伴场景设计：`venting`（倾诉）、`comfort_seeking`（寻求陪伴/安慰）、`advice_seeking`（寻求生活或关系建议）、`positive_sharing`（分享喜悦）、`daily_life_support`（日常生活协助）、`casual_chat`（闲聊）、`withdrawal`（退出当前话题）、`other_request`（其他请求）、`unclear`（无法判断）。不使用通用 `task` 意图。
+意图枚举围绕陪伴场景设计：`venting`（倾诉）、`comfort_seeking`（寻求陪伴/安慰）、`advice_seeking`（寻求生活或关系建议）、`positive_sharing`（分享喜悦）、`daily_life_support`（日常生活协助）、`casual_chat`（闲聊）、`withdrawal`（退出当前话题）、`identity_query`（直接询问角色身份）、`other_request`（其他请求）、`unclear`（无法判断）。身份询问单独分类，不再归入模糊意图。
 
 情绪枚举：`sad`、`happy`、`angry`、`anxious`、`tired`、`confused`、`neutral`、`mixed`、`unclear`。强度为 0 到 3，置信度为 0 到 1。
 
-响应策略为受控标签，例如 `listen_first`、`comfort_gently`、`celebrate_naturally`、`explore_with_user`、`offer_practical_help`、`respect_withdrawal`。策略不是固定写入每一轮，而是由分析模型根据当前消息动态选择。
+响应策略为受控标签，例如 `listen_first`、`comfort_gently`、`celebrate_naturally`、`explore_with_user`、`offer_practical_help`、`respect_withdrawal`、`maintain_independent_judgment`（不盲目附和）和 `stay_grounded`（不补写未提供的事实）。策略不是固定写入每一轮，而是由分析模型根据当前消息动态选择。
 
 ## 推荐测试场景
 
@@ -108,4 +108,4 @@ JSON 支持两种格式：
 - 直接使用数组：`[{ "id": "case-1", "userMessage": "你好" }]`
 - 使用对象包装：`{ "version": 1, "name": "测试集名称", "cases": [...] }`
 
-每道题至少提供 `userMessage` 或 `prompt`。可选字段包括 `id`、`title`、`category`、`expectedIntent`、`expectedEmotion`、`checks` 和 `timeContext`。其中 `timeContext` 可指定 `timestamp` 与 `timeZone`，用于可重复地测试深夜、傍晚等时间场景。注意：`checks` 是评估提示，不会自动判定模型是否通过；当前版本先收集回复与分析结果，尚未接入自动评分模型。
+每道题至少提供 `userMessage` 或 `prompt`。可选字段包括 `id`、`title`、`category`、`expectedIntent`、`expectedEmotion`、`expectedStrategies`、`checks` 和 `timeContext`。其中 `timeContext` 必须同时提供有效的 `timestamp` 与 `timeZone`，用于可重复地测试深夜、傍晚等时间场景；导入后会保留并实际传给服务端，不会回退到运行时当前时间。执行结果会记录 `timeContext` 和 `expectedStrategies`。注意：`checks` 仍是评估提示，不会自动判定模型是否通过；当前版本先收集回复与分析结果，尚未接入自动评分模型。
