@@ -344,16 +344,18 @@ async function sendMessage(text, options = {}) {
         stream: true
       })
     });
+    window.lastRequestId = response.headers.get('x-request-id') || null;
     consoleLog(response.ok ? 'info' : 'error', 'chat.api_request.response', {
       traceId, status: response.status, statusText: response.statusText,
       redirected: response.redirected, responseUrl: response.url,
-      requestId: response.headers.get('x-request-id'), durationMs: Math.round(performance.now() - started)
+      requestId: window.lastRequestId, durationMs: Math.round(performance.now() - started)
     });
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
       consoleLog('error', 'chat.api_request.http_error', {
         traceId, status: response.status, error: error.error || null,
-        detail: error.detail || null, requestId: error.requestId || response.headers.get('x-request-id')
+        detail: error.detail ? String(error.detail).slice(0, 3000) : null,
+        requestId: error.requestId || window.lastRequestId
       });
       throw new Error(error.detail || error.error || 'HTTP ' + response.status);
     }
@@ -368,6 +370,12 @@ async function sendMessage(text, options = {}) {
       if (result.done) break;
       streamChunks += 1;
       streamBytes += result.value ? result.value.byteLength : 0;
+      if (streamChunks === 1) {
+        consoleLog('info', 'chat.stream.first_chunk', {
+          traceId, requestId: window.lastRequestId, firstChunkBytes: result.value ? result.value.byteLength : 0,
+          timeToFirstChunkMs: Math.round(performance.now() - started)
+        });
+      }
       buffer += decoder.decode(result.value, { stream: true });
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
