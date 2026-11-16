@@ -28,8 +28,8 @@ test('batch runner reports why it cannot start instead of silently returning', (
 });
 
 test('browser cache is busted for updated frontend scripts', () => {
-  assert.match(htmlSource, /suite-utils\.js\?v=20261116-8/);
-  assert.match(htmlSource, /app\.js\?v=20261116-8/);
+  assert.match(htmlSource, /suite-utils\.js\?v=20261116-9/);
+  assert.match(htmlSource, /app\.js\?v=20261116-9/);
 });
 
 test('chat UI does not submit a native form or navigate away', () => {
@@ -90,4 +90,11 @@ test('server logs process-level and JSON middleware errors', () => {
   assert.match(serverSource, /process\.on\('unhandledRejection'/);
   assert.match(serverSource, /process\.on\('uncaughtExceptionMonitor'/);
   assert.match(serverSource, /http\.middleware\.error/);
+});
+
+test('header distinguishes an unstarted frontend from backend disconnection', () => {
+  assert.match(htmlSource, /id="status" class="status">前端脚本未运行</);
+  assert.match(appSource, /前端脚本已加载，正在初始化/);
+  assert.match(htmlSource, /app\.js\?v=20261116-9[^>]*onerror=/);
+  assert.match(htmlSource, /suite-utils\.js\?v=20261116-9[^>]*onerror=/);
 });
