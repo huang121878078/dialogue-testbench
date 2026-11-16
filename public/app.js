@@ -87,6 +87,7 @@ function showAnalysis(event) {
     $('analysisStatus').className = 'analysis-status warning';
     $('analysisResult').textContent = '分析不可用，本轮将使用基础角色 Prompt 继续回复。';
   }
+  if (event.responseRequest && Array.isArray(event.responseRequest.messages)) lastMessages = event.responseRequest.messages;
   showPayload({ analysisRequest: event.analysisRequest, responseRequest: event.responseRequest });
 }
 
