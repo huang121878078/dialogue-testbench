@@ -1,5 +1,45 @@
 const $ = (id) => document.getElementById(id);
 
+function consoleLog(level, event, details = {}) {
+  const payload = {
+    time: new Date().toISOString(),
+    event,
+    ...details
+  };
+  const logger = typeof console[level] === 'function' ? console[level] : console.log;
+  logger.call(console, '[DialogueTestbench]', payload);
+}
+
+function summarizeError(error) {
+  if (error instanceof Error) {
+    return { name: error.name, message: error.message, stack: error.stack };
+  }
+  return { message: String(error) };
+}
+
+function safeBaseUrlForLog(value) {
+  try {
+    const url = new URL(value);
+    return url.origin + url.pathname;
+  } catch {
+    return '(invalid URL)';
+  }
+}
+
+window.addEventListener('error', event => {
+  consoleLog('error', 'browser.window_error', {
+    message: event.message,
+    source: event.filename,
+    line: event.lineno,
+    column: event.colno,
+    stack: event.error && event.error.stack
+  });
+});
+
+window.addEventListener('unhandledrejection', event => {
+  consoleLog('error', 'browser.unhandled_rejection', summarizeError(event.reason));
+});
+
 const DEFAULT_SYSTEM_PROMPT = [
   '你是一位长期、稳定的情绪陪伴与生活陪伴伙伴。你的核心工作不是扮演通用问答助手，而是理解用户、关注用户的生活、参与日常交流，让对话自然、可信、有连续性。',
   '【关系与关注重点】',
@@ -74,8 +114,13 @@ function loadConfig() {
       }
     }
   } catch (error) {
-    console.warn('无法读取本地配置，将使用默认配置：', error);
+    consoleLog('warn', 'config.load_failed', summarizeError(error));
   }
+  consoleLog('info', 'config.loaded', {
+    hasApiKey: Boolean($('apiKey').value.trim()),
+    baseUrl: safeBaseUrlForLog($('baseUrl').value),
+    model: $('model').value.trim() || '(missing)'
+  });
 
   // An old saved empty value should not erase the provider defaults.
   if (!$('baseUrl').value.trim()) $('baseUrl').value = DEFAULT_CONFIG.baseUrl;
@@ -94,13 +139,15 @@ function saveConfig(silent = false) {
     if (!silent) $('status').textContent = '配置已保存';
     return true;
   } catch (error) {
-    console.error('保存配置失败：', error);
+    consoleLog('error', 'config.save_failed', summarizeError(error));
     if (!silent) $('status').textContent = '配置保存失败，请检查浏览器存储权限';
     return false;
   }
 }
 
 async function checkBackendConnection() {
+  const startedAt = performance.now();
+  consoleLog('info', 'backend.health_check.start', { origin: window.location.origin });
   try {
     const response = await fetch('/api/health', {
       method: 'GET',
@@ -114,12 +161,20 @@ async function checkBackendConnection() {
       throw new Error('本地 API 健康检查返回 HTTP ' + response.status + '。');
     }
     const data = await response.json();
+    consoleLog('info', 'backend.health_check.response', {
+      status: response.status, redirected: response.redirected, responseUrl: response.url,
+      requestId: response.headers.get('x-request-id'), durationMs: Math.round(performance.now() - startedAt)
+    });
     if (!data || data.ok !== true || data.name !== 'dialogue-testbench') {
       throw new Error('当前页面响应的不是 Dialogue Testbench Node 服务。');
     }
     $('status').textContent = '本地服务已连接';
     return { ok: true };
   } catch (error) {
+    consoleLog('error', 'backend.health_check.failed', {
+      ...summarizeError(error), origin: window.location.origin,
+      durationMs: Math.round(performance.now() - startedAt)
+    });
     const message = '没有连接到 Dialogue Testbench Node 服务。请在项目目录运行 npm start，并访问 http://localhost:3000。当前页面：' + window.location.origin + '。详细信息：' + error.message;
     $('status').textContent = '本地服务未连接';
     return { ok: false, message };
@@ -170,6 +225,13 @@ function showPayload(payload) {
 
 function showAnalysis(event) {
   latestAnalysis = event.analysis || null;
+  consoleLog(event.warning ? 'warn' : 'info', 'chat.analysis_event', {
+    hasAnalysis: Boolean(event.analysis),
+    warning: event.warning || null,
+    intent: event.analysis && event.analysis.userIntent && event.analysis.userIntent.type,
+    emotion: event.analysis && event.analysis.userEmotion && event.analysis.userEmotion.type,
+    requestId: event.requestId || null
+  });
   if (event.analysis) {
     $('analysisStatus').textContent = event.warning || '本轮分析完成';
     $('analysisStatus').className = event.warning ? 'analysis-status warning' : 'analysis-status success';
@@ -200,16 +262,35 @@ function handleStreamData(data, assistant) {
       assistant.content += delta;
       render();
     }
-  } catch {}
+  } catch (error) {
+    consoleLog('warn', 'chat.stream_event_parse_failed', {
+      ...summarizeError(error), dataLength: data.length
+    });
+  }
 }
 
 async function sendMessage(text, options = {}) {
-  if (!text || !text.trim()) return null;
+  const traceId = 'browser-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 7);
+  const sendStartedAt = performance.now();
+  if (!text || !text.trim()) {
+    consoleLog('debug', 'chat.send_ignored_empty');
+    return null;
+  }
+  consoleLog('info', 'chat.send_requested', {
+    traceId, model: $('model').value.trim(), baseUrl: safeBaseUrlForLog($('baseUrl').value),
+    dynamicAnalysis: $('useDynamicAnalysis').checked, messageLength: text.trim().length,
+    fixedTimeContext: Boolean(options.clientTime)
+  });
   if (busy) {
+    consoleLog('warn', 'chat.send_blocked_busy', { traceId });
     $('status').textContent = '上一条消息仍在处理中，请稍后再发送';
     return { content: '', error: true };
   }
   if (!$('baseUrl').value.trim() || !$('apiKey').value.trim() || !$('model').value.trim()) {
+    consoleLog('warn', 'chat.send_blocked_missing_config', {
+      traceId, hasBaseUrl: Boolean($('baseUrl').value.trim()),
+      hasApiKey: Boolean($('apiKey').value.trim()), hasModel: Boolean($('model').value.trim())
+    });
     $('status').textContent = '请填写 API Key；Base URL 和模型已有默认值';
     return { content: '缺少 API Key', error: true };
   }
@@ -217,6 +298,7 @@ async function sendMessage(text, options = {}) {
   // Confirm the relative /api/chat route is actually served by this Node app.
   const backend = await checkBackendConnection();
   if (!backend.ok) {
+    consoleLog('error', 'chat.send_aborted_backend_unavailable', { traceId, message: backend.message });
     const assistant = { role: 'assistant', content: backend.message, error: true };
     history.push({ role: 'user', content: text.trim() }, assistant);
     render();
@@ -240,7 +322,13 @@ async function sendMessage(text, options = {}) {
   history.push(assistant);
   render();
   const started = performance.now();
+  let streamChunks = 0;
+  let streamBytes = 0;
   try {
+    consoleLog('info', 'chat.api_request.start', {
+      traceId, model: $('model').value.trim(), baseUrl: safeBaseUrlForLog($('baseUrl').value),
+      messageCount: messages.length, dynamicAnalysis: $('useDynamicAnalysis').checked
+    });
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -256,8 +344,17 @@ async function sendMessage(text, options = {}) {
         stream: true
       })
     });
+    consoleLog(response.ok ? 'info' : 'error', 'chat.api_request.response', {
+      traceId, status: response.status, statusText: response.statusText,
+      redirected: response.redirected, responseUrl: response.url,
+      requestId: response.headers.get('x-request-id'), durationMs: Math.round(performance.now() - started)
+    });
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
+      consoleLog('error', 'chat.api_request.http_error', {
+        traceId, status: response.status, error: error.error || null,
+        detail: error.detail || null, requestId: error.requestId || response.headers.get('x-request-id')
+      });
       throw new Error(error.detail || error.error || 'HTTP ' + response.status);
     }
     if (!response.body || typeof response.body.getReader !== 'function') {
@@ -269,6 +366,8 @@ async function sendMessage(text, options = {}) {
     while (true) {
       const result = await reader.read();
       if (result.done) break;
+      streamChunks += 1;
+      streamBytes += result.value ? result.value.byteLength : 0;
       buffer += decoder.decode(result.value, { stream: true });
       const lines = buffer.split('\n');
       buffer = lines.pop() || '';
@@ -277,8 +376,19 @@ async function sendMessage(text, options = {}) {
       }
     }
     if (buffer.startsWith('data:')) handleStreamData(buffer.slice(5).trim(), assistant);
-    $('status').textContent = '完成 · ' + ((performance.now() - started) / 1000).toFixed(1) + 's';
+    const durationMs = Math.round(performance.now() - started);
+    consoleLog(assistant.content ? 'info' : 'warn', 'chat.stream.finished', {
+      traceId, streamChunks, streamBytes, responseLength: assistant.content.length,
+      durationMs, totalDurationMs: Math.round(performance.now() - sendStartedAt),
+      emptyResponse: !assistant.content
+    });
+    $('status').textContent = '完成 · ' + (durationMs / 1000).toFixed(1) + 's';
   } catch (error) {
+    consoleLog('error', 'chat.send_failed', {
+      traceId, ...summarizeError(error),
+      durationMs: Math.round(performance.now() - sendStartedAt),
+      requestId: window.lastRequestId || null
+    });
     assistant.content = '请求失败：' + error.message;
     assistant.error = true;
     $('status').textContent = '请求失败';
@@ -290,6 +400,7 @@ async function sendMessage(text, options = {}) {
     busy = false;
     $('sendBtn').disabled = false;
     render();
+    consoleLog('debug', 'chat.send_finalized', { traceId, durationMs: Math.round(performance.now() - sendStartedAt) });
   }
   return assistant;
 }
@@ -356,12 +467,17 @@ $('importSuite').addEventListener('change', async event => {
     if (typeof normalizeImportedSuite !== 'function') {
       throw new Error('测试集导入脚本未加载。请强制刷新页面（Ctrl + F5）后重试。');
     }
+    consoleLog('info', 'suite.import.start', { fileName: file.name, fileSize: file.size });
     const parsed = JSON.parse(await file.text());
     importedSuite = normalizeImportedSuite(parsed);
+    consoleLog('info', 'suite.import.success', {
+      name: importedSuite.name, version: importedSuite.version, caseCount: importedSuite.cases.length
+    });
     $('suiteName').textContent = importedSuite.name + ' · ' + importedSuite.cases.length + ' 题';
     $('runSuite').disabled = false;
     updateRunnerStatus('已导入：' + importedSuite.cases.length + ' 道题，等待执行。');
   } catch (error) {
+    consoleLog('error', 'suite.import.failed', summarizeError(error));
     importedSuite = null;
     $('runSuite').disabled = true;
     $('suiteName').textContent = '尚未导入测试集';
@@ -370,19 +486,29 @@ $('importSuite').addEventListener('change', async event => {
 });
 
 $('runSuite').addEventListener('click', async () => {
+  consoleLog('info', 'suite.run.clicked', {
+    imported: Boolean(importedSuite), caseCount: importedSuite ? importedSuite.cases.length : 0,
+    runnerActive, busy
+  });
   if (!importedSuite) {
     updateRunnerStatus('请先导入 JSON 测试集，再点击执行。');
     return;
   }
   if (runnerActive) {
+    consoleLog('warn', 'suite.run.blocked_already_running');
     updateRunnerStatus('测试集正在执行，请等待完成或点击停止。');
     return;
   }
   if (busy) {
+    consoleLog('warn', 'suite.run.blocked_chat_busy');
     updateRunnerStatus('当前有一条手动消息正在生成，请等待完成后再执行测试集。');
     return;
   }
   if (!$('baseUrl').value.trim() || !$('apiKey').value.trim() || !$('model').value.trim()) {
+    consoleLog('error', 'suite.run.blocked_missing_config', {
+      hasBaseUrl: Boolean($('baseUrl').value.trim()), hasApiKey: Boolean($('apiKey').value.trim()),
+      hasModel: Boolean($('model').value.trim())
+    });
     updateRunnerStatus('请填写 API Key；Base URL 和模型已有默认值。');
     $('status').textContent = '缺少 API Key';
     return;
@@ -390,6 +516,7 @@ $('runSuite').addEventListener('click', async () => {
 
   const backend = await checkBackendConnection();
   if (!backend.ok) {
+    consoleLog('error', 'suite.run.aborted_backend_unavailable', { message: backend.message });
     updateRunnerStatus(backend.message);
     return;
   }
@@ -401,6 +528,11 @@ $('runSuite').addEventListener('click', async () => {
   $('stopSuite').disabled = false;
   const isolated = $('isolateCases').checked;
   const total = importedSuite.cases.length;
+  const suiteStartedAt = performance.now();
+  consoleLog('info', 'suite.run.started', {
+    name: importedSuite.name, total, isolatedCases: isolated,
+    model: $('model').value.trim(), baseUrl: safeBaseUrlForLog($('baseUrl').value)
+  });
   updateRunnerStatus('开始执行：' + importedSuite.name);
   try {
     for (let index = 0; index < total; index++) {
@@ -411,7 +543,12 @@ $('runSuite').addEventListener('click', async () => {
         latestAnalysis = null;
         render();
       }
+      consoleLog('info', 'suite.case.started', {
+        index: index + 1, total, id: item.id, title: item.title,
+        category: item.category, fixedTimeContext: Boolean(item.timeContext)
+      });
       updateRunnerStatus('正在执行 ' + (index + 1) + '/' + total + '：' + item.title);
+      const caseStartedAt = performance.now();
       const assistant = await sendMessage(item.userMessage, { clientTime: item.timeContext || null });
       runnerResults.push({
         id: item.id,
@@ -428,11 +565,20 @@ $('runSuite').addEventListener('click', async () => {
         analysis: latestAnalysis,
         completedAt: new Date().toISOString()
       });
+      consoleLog(assistant && assistant.error ? 'error' : 'info', 'suite.case.finished', {
+        index: index + 1, total, id: item.id, error: Boolean(assistant && assistant.error),
+        responseLength: assistant && assistant.content ? assistant.content.length : 0,
+        durationMs: Math.round(performance.now() - caseStartedAt),
+        analysisIntent: latestAnalysis && latestAnalysis.userIntent && latestAnalysis.userIntent.type
+      });
       updateRunnerStatus((index + 1) + '/' + total + ' 已完成' + (assistant && assistant.error ? '（本题请求失败）' : '') + '。');
       if (runnerActive && index < total - 1) {
         await new Promise(resolve => setTimeout(resolve, 700));
       }
     }
+  } catch (error) {
+    consoleLog('error', 'suite.run.failed', summarizeError(error));
+    updateRunnerStatus('测试集执行异常：' + error.message);
   } finally {
     runnerActive = false;
     $('runSuite').disabled = !importedSuite;
@@ -452,6 +598,11 @@ $('runSuite').addEventListener('click', async () => {
       URL.revokeObjectURL(url);
     }
     const stopped = runnerResults.length < total;
+    consoleLog('info', 'suite.run.finished', {
+      completed: runnerResults.length, total, stopped,
+      failedCases: runnerResults.filter(result => result.error).length,
+      durationMs: Math.round(performance.now() - suiteStartedAt), exported: runnerResults.length > 0
+    });
     updateRunnerStatus(
       (stopped ? '已停止：' : '执行结束：') +
       runnerResults.length + '/' + total + ' 题。' +
@@ -461,12 +612,16 @@ $('runSuite').addEventListener('click', async () => {
 });
 
 $('stopSuite').addEventListener('click', () => {
+  consoleLog('warn', 'suite.run.stop_requested', { completed: runnerResults.length });
   runnerActive = false;
   updateRunnerStatus('已请求停止，将在当前题目结束后停止。');
 });
 
 
+consoleLog('info', 'app.init.start', { href: window.location.href, userAgent: navigator.userAgent });
 loadConfig();
 saveConfig(true);
 render();
-checkBackendConnection();
+checkBackendConnection().then(result => {
+  consoleLog(result.ok ? 'info' : 'error', 'app.init.finished', result);
+});
