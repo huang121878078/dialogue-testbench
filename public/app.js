@@ -1,5 +1,12 @@
 const $ = (id) => document.getElementById(id);
 
+// This marker changes even before any other app initialization runs.
+if ($('status')) $('status').textContent = '前端脚本已加载，正在初始化…';
+console.info('[DialogueTestbench] frontend.script_loaded', {
+  time: new Date().toISOString(),
+  href: window.location.href
+});
+
 function sanitizeConsoleValue(value, key = '') {
   if (/(api.?key|authorization|password|secret|access.?token)/i.test(key)) {
     return value ? '[REDACTED]' : value;
