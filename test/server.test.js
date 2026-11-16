@@ -226,3 +226,15 @@ test('character contribution requires an allowed topic and a concrete stance', (
   assert.equal(valid.characterContribution.hasContribution, true);
   assert.equal(valid.characterContribution.topic, '游戏设计');
 });
+
+
+test('analysis evidence is kept only when quoted from the current user message', () => {
+  const result = normalizeAnalysis({
+    userIntent: { type: 'venting', confidence: 0.9, evidence: '用户因为老板批评而感到压力' },
+    userEmotion: { type: 'anxious', intensity: 2, confidence: 0.85, evidence: '老板批评' },
+    responseStrategy: ['listen_first']
+  }, { currentUserMessage: '最近工作有点忙。' });
+
+  assert.equal(result.userIntent.evidence, '');
+  assert.equal(result.userEmotion.evidence, '');
+});
