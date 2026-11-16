@@ -46,6 +46,9 @@ let history = [];
 let lastMessages = [];
 let latestAnalysis = null;
 let busy = false;
+let importedSuite = null;
+let runnerActive = false;
+let runnerResults = [];
 
 function loadConfig() {
   try {
@@ -215,6 +218,7 @@ async function sendMessage(text) {
     $('sendBtn').disabled = false;
     render();
   }
+  return assistant;
 }
 
 $('chatForm').addEventListener('submit', event => {
@@ -257,6 +261,126 @@ $('exportChat').addEventListener('click', () => {
   anchor.click();
   URL.revokeObjectURL(url);
 });
+
+
+
+function normalizeImportedSuite(data) {
+  const cases = Array.isArray(data) ? data : data && data.cases;
+  if (!Array.isArray(cases) || cases.length === 0) {
+    throw new Error('JSON 必须是测试用例数组，或包含 cases 数组的对象。');
+  }
+  const normalized = cases.map((item, index) => {
+    const userMessage = typeof item.userMessage === 'string' ? item.userMessage : item.prompt;
+    if (typeof userMessage !== 'string' || !userMessage.trim()) {
+      throw new Error('第 ' + (index + 1) + ' 题缺少 userMessage 或 prompt。');
+    }
+    return {
+      id: item.id || 'case-' + (index + 1),
+      title: item.title || item.name || '测试问题 ' + (index + 1),
+      category: item.category || 'general',
+      userMessage: userMessage.trim(),
+      expectedIntent: item.expectedIntent || null,
+      expectedEmotion: item.expectedEmotion || null,
+      checks: Array.isArray(item.checks) ? item.checks : []
+    };
+  });
+  return {
+    name: (!Array.isArray(data) && data.name) || '导入的对话测试集',
+    version: (!Array.isArray(data) && data.version) || 1,
+    cases: normalized
+  };
+}
+
+function updateRunnerStatus(message) {
+  $('runnerStatus').textContent = message;
+}
+
+$('importSuite').addEventListener('change', async event => {
+  const file = event.target.files && event.target.files[0];
+  if (!file) return;
+  try {
+    const parsed = JSON.parse(await file.text());
+    importedSuite = normalizeImportedSuite(parsed);
+    $('suiteName').textContent = importedSuite.name + ' · ' + importedSuite.cases.length + ' 题';
+    $('runSuite').disabled = false;
+    updateRunnerStatus('已导入：' + importedSuite.cases.length + ' 道题，等待执行。');
+  } catch (error) {
+    importedSuite = null;
+    $('runSuite').disabled = true;
+    $('suiteName').textContent = '尚未导入测试集';
+    updateRunnerStatus('导入失败：' + error.message);
+  }
+});
+
+$('runSuite').addEventListener('click', async () => {
+  if (!importedSuite || runnerActive || busy) return;
+  if (!$('baseUrl').value.trim() || !$('apiKey').value.trim() || !$('model').value.trim()) {
+    updateRunnerStatus('请先填写 API Base URL、API Key 和模型名称。');
+    return;
+  }
+  runnerActive = true;
+  runnerResults = [];
+  $('runSuite').disabled = true;
+  $('stopSuite').disabled = false;
+  const isolated = $('isolateCases').checked;
+  const total = importedSuite.cases.length;
+  updateRunnerStatus('开始执行：' + importedSuite.name);
+  try {
+    for (let index = 0; index < total; index++) {
+      if (!runnerActive) break;
+      const item = importedSuite.cases[index];
+      if (isolated) {
+        history = [];
+        latestAnalysis = null;
+        render();
+      }
+      updateRunnerStatus('正在执行 ' + (index + 1) + '/' + total + '：' + item.title);
+      const assistant = await sendMessage(item.userMessage);
+      runnerResults.push({
+        id: item.id,
+        title: item.title,
+        category: item.category,
+        userMessage: item.userMessage,
+        expectedIntent: item.expectedIntent,
+        expectedEmotion: item.expectedEmotion,
+        checks: item.checks,
+        assistantResponse: assistant ? assistant.content : '',
+        error: assistant ? Boolean(assistant.error) : true,
+        analysis: latestAnalysis,
+        completedAt: new Date().toISOString()
+      });
+      updateRunnerStatus((index + 1) + '/' + total + ' 已完成' + (assistant && assistant.error ? '（本题请求失败）' : '') + '。');
+      if (runnerActive && index < total - 1) {
+        await new Promise(resolve => setTimeout(resolve, 700));
+      }
+    }
+  } finally {
+    runnerActive = false;
+    $('runSuite').disabled = !importedSuite;
+    $('stopSuite').disabled = true;
+    if (runnerResults.length) {
+      const blob = new Blob([JSON.stringify({
+        suite: importedSuite.name,
+        executedAt: new Date().toISOString(),
+        isolatedCases: isolated,
+        results: runnerResults
+      }, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = 'dialogue-test-results.json';
+      anchor.click();
+      URL.revokeObjectURL(url);
+    }
+    updateRunnerStatus('执行结束：' + runnerResults.length + '/' + total + ' 题。结果 JSON 已导出。');
+  }
+});
+
+$('stopSuite').addEventListener('click', () => {
+  runnerActive = false;
+  updateRunnerStatus('已请求停止，将在当前题目结束后停止。');
+});
+
 
 loadConfig();
 render();
