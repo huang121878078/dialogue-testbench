@@ -33,6 +33,19 @@ function serverLog(level, event, details = {}) {
   console[method](line);
 }
 
+process.on('unhandledRejection', reason => {
+  const error = reason instanceof Error
+    ? { name: reason.name, message: reason.message, stack: reason.stack }
+    : { message: String(reason) };
+  serverLog('error', 'process.unhandled_rejection', error);
+});
+
+process.on('uncaughtExceptionMonitor', (error, origin) => {
+  serverLog('error', 'process.uncaught_exception', {
+    origin, name: error.name, message: error.message, stack: error.stack
+  });
+});
+
 function safeEndpointForLog(endpoint) {
   try {
     const url = new URL(endpoint);
@@ -471,6 +484,23 @@ app.post('/api/chat', async (req, res) => {
     if (!res.headersSent) res.status(502).json({ error: '连接模型服务失败', detail: error.message, requestId });
     else res.end();
   }
+});
+
+app.use((error, req, res, next) => {
+  serverLog('error', 'http.middleware.error', {
+    requestId: req.requestId || null,
+    method: req.method,
+    path: req.path,
+    status: error.status || 500,
+    name: error.name,
+    message: error.message
+  });
+  if (res.headersSent) return next(error);
+  const status = Number.isInteger(error.status) ? error.status : 500;
+  res.status(status).json({
+    error: status === 400 ? '请求 JSON 无法解析。' : '服务器内部错误。',
+    requestId: req.requestId || null
+  });
 });
 
 if (require.main === module) {
