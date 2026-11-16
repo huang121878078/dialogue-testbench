@@ -24,6 +24,11 @@ function normalizeImportedSuite(data) {
       if (!timeZone) {
         throw new Error('第 ' + (index + 1) + ' 题的 timeContext.timeZone 不能为空。');
       }
+      try {
+        new Intl.DateTimeFormat('en-US', { timeZone }).format(new Date(timestamp));
+      } catch {
+        throw new Error('第 ' + (index + 1) + ' 题的 timeContext.timeZone 不是有效的 IANA 时区。');
+      }
       timeContext = { timestamp, timeZone };
     }
 
