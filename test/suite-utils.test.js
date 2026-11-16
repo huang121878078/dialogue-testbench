@@ -43,4 +43,8 @@ test('rejects malformed messages and malformed fixed time contexts', () => {
     userMessage: '你好',
     timeContext: { timestamp: '2026-11-16T17:30:00.000Z' }
   }]), /timeZone 不能为空/);
+  assert.throws(() => normalizeImportedSuite([{
+    userMessage: '你好',
+    timeContext: { timestamp: '2026-11-16T17:30:00.000Z', timeZone: 'Not/A-Timezone' }
+  }]), /不是有效的 IANA 时区/);
 });
