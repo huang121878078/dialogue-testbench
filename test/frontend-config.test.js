@@ -52,3 +52,29 @@ test('provider requests do not silently follow 3xx redirects', () => {
   assert.match(serverSource, /模型接口返回了 HTTP/);
   assert.match(serverSource, /upstream\.headers\.get\('location'\)/);
 });
+
+test('browser logs global errors, chat lifecycle and batch test lifecycle', () => {
+  assert.match(appSource, /browser\.window_error/);
+  assert.match(appSource, /browser\.unhandled_rejection/);
+  assert.match(appSource, /chat\.send_failed/);
+  assert.match(appSource, /chat\.stream\.first_chunk/);
+  assert.match(appSource, /suite\.case\.started/);
+  assert.match(appSource, /suite\.case\.finished/);
+  assert.match(appSource, /suite\.run\.failed/);
+});
+
+test('browser diagnostics do not print the API key value', () => {
+  assert.match(appSource, /hasApiKey: Boolean\(\$\('apiKey'\)\.value\.trim\(\)\)/);
+  assert.doesNotMatch(appSource, /apiKey:\s*\$\('apiKey'\)\.value/);
+});
+
+test('server logs API request ids and provider request lifecycle without raw credentials', () => {
+  assert.match(serverSource, /X-Request-Id/);
+  assert.match(serverSource, /http\.request\.start/);
+  assert.match(serverSource, /http\.request\.finish/);
+  assert.match(serverSource, /provider\.analysis\.start/);
+  assert.match(serverSource, /provider\.completion\.start/);
+  assert.match(serverSource, /provider\.completion\.stream_finished/);
+  assert.match(serverSource, /safeEndpointForLog\(baseUrl\)/);
+  assert.doesNotMatch(serverSource, /apiKey:\s*apiKey/);
+});
