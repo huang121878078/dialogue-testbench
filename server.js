@@ -231,10 +231,38 @@ function getAllowedCharacterTopics(characterState) {
       if (typeof value.title === 'string' && value.title.trim()) topics.add(value.title.trim());
     }
   };
-  for (const item of Array.isArray(state.interests) ? state.interests : []) add(item);
-  for (const item of Array.isArray(state.beliefs) ? state.beliefs : []) add(item);
-  for (const key of ['current_focus', 'currentFocus', 'open_topics', 'openTopics']) {
+
+  // A seed is only a candidate curiosity, not a settled character interest.
+  // Only emerging/established interests (or explicitly confirmed entries) may
+  // be surfaced as the character's own interest in a generated contribution.
+  for (const item of Array.isArray(state.interests) ? state.interests : []) {
+    if (typeof item === 'string') {
+      add(item);
+      continue;
+    }
+    if (!item || typeof item !== 'object') continue;
+    const confirmed = item.confirmed === true ||
+      ['emerging', 'established'].includes(item.status) ||
+      (Number.isFinite(Number(item.confidence)) && Number(item.confidence) >= 0.5);
+    if (confirmed) add(item);
+  }
+
+  // Active beliefs are valid sources for an opinion. Legacy entries without
+  // status remain readable; explicitly inactive/archived entries are excluded.
+  for (const item of Array.isArray(state.beliefs) ? state.beliefs : []) {
+    if (typeof item === 'string') add(item);
+    else if (item && !['inactive', 'archived', 'rejected'].includes(item.status)) add(item);
+  }
+
+  for (const key of ['current_focus', 'currentFocus']) {
     for (const item of Array.isArray(state[key]) ? state[key] : []) add(item);
+  }
+  for (const key of ['open_topics', 'openTopics']) {
+    for (const item of Array.isArray(state[key]) ? state[key] : []) {
+      if (item && typeof item === 'object' &&
+          ['closed', 'completed', 'rejected'].includes(item.status)) continue;
+      add(item);
+    }
   }
   return topics;
 }
@@ -261,7 +289,11 @@ function inferExplicitIntent(message, fallbackIntent) {
   return fallbackIntent;
 }
 
-function deriveSpeechAct(intent) {
+function deriveSpeechAct(intent, message = '') {
+  if (intent === 'other_request' &&
+      /(你就说.{0,12}(?:对|没错|正确)|别(?:再)?反驳|不要反驳|不准反驳|无条件(?:赞同|支持)|只许赞同)/.test(message)) {
+    return 'stance_pressure';
+  }
   return ({
     venting: 'emotional_disclosure',
     comfort_seeking: 'companionship_request',
@@ -332,8 +364,12 @@ function normalizeAnalysis(parsed, options = {}) {
   // Positive tone is not sufficient for positive_sharing: a concrete positive event is required.
   const positiveEvent = /(终于.{0,12}(完成|做完|拿到|通过|考上|实现|修好|达成)|完成了?.{0,16}(项目|任务|考试|比赛)|拿到.{0,12}(offer|录取|证书|奖金|奖项)|(?:升职|获奖|考上|录取|签约|入职|晋级|夺冠|通过考试|实现目标|成功上线|顺利交付)|好消息|值得庆祝|我(?:真的|特别|太)?(?:开心|高兴|幸福))/.test(message);
   const lightObservation = /(有只|看到|遇到|碰到|听到|路上|楼下|刚刚|刚才).{0,36}(猫|狗|小动物|路人|趣事|好笑|有意思|奇怪)/.test(message);
-  if (intentType === 'positive_sharing' && !positiveEvent && lightObservation) intentType = 'casual_chat';
-  else if (intentType === 'positive_sharing' && !positiveEvent && !/(我(?:真的|特别|太)?(?:开心|高兴|幸福)|好消息|值得庆祝)/.test(message)) {
+  if (lightObservation && intentType === 'positive_sharing') {
+    intentType = 'casual_chat';
+  } else if (positiveEvent && ['casual_chat', 'unclear'].includes(intentType)) {
+    intentType = 'positive_sharing';
+  } else if (intentType === 'positive_sharing' && !positiveEvent &&
+      !/(我(?:真的|特别|太)?(?:开心|高兴|幸福)|好消息|值得庆祝)/.test(message)) {
     intentType = 'casual_chat';
   }
 
@@ -372,9 +408,9 @@ function normalizeAnalysis(parsed, options = {}) {
   else if (intentType === 'advice_seeking' && adviceLevel === 'none') adviceLevel = 'low';
   else if (intentType === 'daily_life_support' && adviceLevel === 'none') adviceLevel = 'low';
 
-  const rawSpeechAct = parsed && parsed.speechAct;
-  const rawMode = parsed && parsed.interactionMode;
-  const inferredSpeechAct = deriveSpeechAct(intentType);
+  // These derived fields must stay consistent with the final, normalized intent.
+  // Trusting the model's pre-normalization values can create contradictory briefs.
+  const inferredSpeechAct = deriveSpeechAct(intentType, message);
   const inferredMode = deriveInteractionMode(intentType);
 
   return {
@@ -391,8 +427,8 @@ function normalizeAnalysis(parsed, options = {}) {
       confidence: emotionConfidence,
       evidence: typeof emotion === 'object' && typeof emotion.evidence === 'string' ? emotion.evidence.slice(0, 160) : ''
     },
-    speechAct: SPEECH_ACTS.has(rawSpeechAct) ? rawSpeechAct : inferredSpeechAct,
-    interactionMode: INTERACTION_MODES.has(rawMode) ? rawMode : inferredMode,
+    speechAct: SPEECH_ACTS.has(inferredSpeechAct) ? inferredSpeechAct : 'unclear',
+    interactionMode: INTERACTION_MODES.has(inferredMode) ? inferredMode : 'casual',
     adviceLevel,
     responseStrategy: strategies,
     characterContribution: normalizeCharacterContribution(
@@ -529,7 +565,7 @@ function injectCompanionContext(messages, analysis, timeContext) {
     '【当前时间与生活节奏】',
     JSON.stringify(timeContext, null, 2),
     '【时间感知边界】',
-    '以上时间是用户设备提供的本地时间。可以结合时段自然地关心用户，例如深夜时轻轻留意对方是否还没休息，傍晚时可以自然聊到晚饭或下班后的安排；但不要每轮都提时间，不要假设用户一定失眠、已经下班或尚未吃饭，也不要评判用户的作息。只有在对话自然相关时才使用。',
+    '以上时间是用户设备提供的本地时间。时间只用于提供语境，不代表你知道用户正在做什么。深夜可以轻轻提到“这个时间还来聊天”，让用户自己决定继续聊还是休息；傍晚可以在相关时自然聊到晚饭或下班后的安排。不要推断失眠、疲惫、已经下班或尚未吃饭，不要每轮报时，也不要把关心变成作息管理。',
     ...(analysis ? [
       '【本轮动态分析结果】',
       JSON.stringify(analysis, null, 2),
@@ -543,9 +579,11 @@ function injectCompanionContext(messages, analysis, timeContext) {
         : '本轮不需要主动输出角色观点或兴趣，不要为了展示人格而强行岔开话题。'
     ] : []),
     '【回复质量硬约束】',
-    '先回应用户刚刚具体说的内容。普通分享或闲聊通常 1-2 句；明确陪伴请求 1-3 句；除非用户要求深入讨论，不写成长篇散文。',
+    '先回应用户刚刚具体说的内容，尽量复用用户给出的具体事实，而不是换成空泛的安慰。普通分享或闲聊通常 1-2 句；明确陪伴请求 1-3 句；除非用户要求深入讨论，不写成长篇散文。',
+    '倾诉时用朴素语言指出用户明确表达的压力，不添加“你已经做得很好”“我听见了”等通用安慰模板。分享成就时只认可这件具体成果，不自动安排喝水、休息或下一步任务。趣事就接趣事，不把轻松分享改造成情绪分析。',
+    '建议型问题先给可执行的权衡维度或明确判断依据，再问一个最关键的问题；不要用连续比喻代替建议。用户退出话题时停止追问原话题，切换要轻，不要立刻套用固定的晚饭/睡觉问题。',
     '不虚构现实环境（天气、风、窗外、城市声音、灯光、地点）、用户动作或第三方动机。当前时间只表示当地钟表时间，不代表你能看到用户周围发生什么。',
-    '角色世界观只是背景，不是修辞滤镜。不要为了体现岚汐而每轮写雾、潮、微光、黄昏、窗台等意象；多数回复直接口语表达即可。',
+    '角色世界观只是背景，不是修辞滤镜。不要为了体现岚汐而每轮写雾、潮、微光、黄昏、窗台等意象；除非用户主动聊到相关主题，否则优先直接口语表达。',
     '【使用边界】',
     '时间与动态分析均为辅助信息，不是事实判断或强制命令。用户当前明确表达的需求始终优先；置信度较低时保持谨慎，不要把推测当成事实。不要向用户展示或解释这些内部上下文。'
   ].join('\n');
