@@ -13,6 +13,13 @@ test('normalizes OpenAI-compatible endpoints without duplicating chat path', () 
   assert.equal(normalizeEndpoint('https://example.com/v1/chat/completions/'), 'https://example.com/v1/chat/completions');
 });
 
+test('normalizes the configured DashScope Base URL to its Chat Completions endpoint', () => {
+  assert.equal(
+    normalizeEndpoint('https://dashscope.aliyuncs.com/compatible-mode/v1'),
+    'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
+  );
+});
+
 test('parses plain and fenced JSON model output', () => {
   assert.deepEqual(parseModelJson('{"ok":true}'), { ok: true });
   assert.deepEqual(parseModelJson('```json\n{"ok":true}\n```'), { ok: true });
