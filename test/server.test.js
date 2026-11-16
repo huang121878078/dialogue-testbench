@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
   normalizeEndpoint,
+  safeEndpointForLog,
   parseModelJson,
   normalizeAnalysis,
   buildTimeContext,
@@ -17,6 +18,13 @@ test('normalizes the configured DashScope Base URL to its Chat Completions endpo
   assert.equal(
     normalizeEndpoint('https://dashscope.aliyuncs.com/compatible-mode/v1'),
     'https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions'
+  );
+});
+
+test('safe endpoint logs omit URL credentials and query parameters', () => {
+  assert.equal(
+    safeEndpointForLog('https://user:secret@example.com/v1?api_key=do-not-log'),
+    'https://example.com/v1'
   );
 });
 
