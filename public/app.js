@@ -8,7 +8,7 @@ const DEFAULT_ANALYSIS_PROMPT = [
   '响应策略枚举：listen_first、acknowledge_emotion、comfort_gently、celebrate_naturally、explore_with_user、offer_practical_help、offer_gentle_advice、natural_chat、respect_withdrawal、ask_one_open_question、validate_without_assuming、avoid_unsolicited_advice、be_concise。选择 1 到 4 个。',
   '策略选择原则：倾诉先回应和倾听；明确寻求陪伴时温和支持；寻求建议时先理解处境，再一起梳理选择；分享喜悦时自然庆祝但不要夸张；日常生活协助应像伙伴一样一起规划；闲聊自然回应；用户拒绝继续时尊重退出。用户明确说不要安慰、不要建议等要求时必须遵守。',
   '不要臆测用户没有表达的原因、经历或心理状态。evidence 只引用或简短概括用户明确表达的内容，不输出推理过程。',
-  '只返回合法 JSON，不要 Markdown 或额外解释。格式：{"userIntent":{"type":"task","confidence":0.9,"evidence":"..."},"userEmotion":{"type":"neutral","intensity":0,"confidence":0.8,"evidence":"..."},"responseStrategy":["answer_directly","be_concise"]}'
+  '只返回合法 JSON，不要 Markdown 或额外解释。格式：{"userIntent":{"type":"daily_life_support","confidence":0.9,"evidence":"用户希望一起安排日常生活"},"userEmotion":{"type":"neutral","intensity":0,"confidence":0.8,"evidence":"没有明显情绪表达"},"responseStrategy":["offer_practical_help","be_concise"]}'
 ].join('\n');
 
 const fields = ['baseUrl', 'apiKey', 'model', 'temperature', 'systemPrompt', 'persona', 'useDynamicAnalysis', 'analysisPrompt', 'useExtra', 'extra'];
