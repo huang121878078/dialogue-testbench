@@ -31,6 +31,18 @@ test('normalizes analysis into controlled intent, emotion and strategy enums', (
   assert.deepEqual(result.responseStrategy, ['listen_first', 'be_concise']);
 });
 
+test('recognizes the dedicated identity intent and new companion strategies', () => {
+  const result = normalizeAnalysis({
+    userIntent: { type: 'identity_query', confidence: 0.95, evidence: '用户询问是否为 AI' },
+    userEmotion: { type: 'neutral', intensity: 0, confidence: 0.9 },
+    responseStrategy: ['maintain_independent_judgment', 'stay_grounded', 'be_concise']
+  });
+  assert.equal(result.userIntent.type, 'identity_query');
+  assert.deepEqual(result.responseStrategy, [
+    'maintain_independent_judgment', 'stay_grounded', 'be_concise'
+  ]);
+});
+
 test('time context uses the supplied IANA timezone and stable local fields', () => {
   const result = buildTimeContext({
     timestamp: '2026-11-16T10:00:00.000Z',
@@ -39,6 +51,16 @@ test('time context uses the supplied IANA timezone and stable local fields', () 
   assert.equal(result.localTime, '18:00');
   assert.equal(result.dayPeriod, '傍晚/晚间');
   assert.equal(result.timeZone, 'Asia/Singapore');
+});
+
+test('late-night time context crosses the date boundary correctly', () => {
+  const result = buildTimeContext({
+    timestamp: '2026-11-16T17:30:00.000Z',
+    timeZone: 'Asia/Singapore'
+  });
+  assert.equal(result.date, '2026-11-17');
+  assert.equal(result.localTime, '01:30');
+  assert.equal(result.dayPeriod, '深夜/凌晨');
 });
 
 test('invalid timezone safely falls back to UTC', () => {
