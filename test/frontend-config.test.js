@@ -5,6 +5,7 @@ const path = require('node:path');
 
 const appSource = fs.readFileSync(path.join(__dirname, '../public/app.js'), 'utf8');
 const htmlSource = fs.readFileSync(path.join(__dirname, '../public/index.html'), 'utf8');
+const serverSource = fs.readFileSync(path.join(__dirname, '../server.js'), 'utf8');
 
 test('frontend defaults to DashScope compatible endpoint and qwen-flash', () => {
   assert.match(appSource, /baseUrl:\s*'https:\/\/dashscope\.aliyuncs\.com\/compatible-mode\/v1'/);
@@ -27,6 +28,26 @@ test('batch runner reports why it cannot start instead of silently returning', (
 });
 
 test('browser cache is busted for updated frontend scripts', () => {
-  assert.match(htmlSource, /suite-utils\.js\?v=20261116-3/);
-  assert.match(htmlSource, /app\.js\?v=20261116-3/);
+  assert.match(htmlSource, /suite-utils\.js\?v=20261116-4/);
+  assert.match(htmlSource, /app\.js\?v=20261116-4/);
+});
+
+test('chat UI does not submit a native form or navigate away', () => {
+  assert.match(htmlSource, /<div id="chatForm" class="composer">/);
+  assert.doesNotMatch(htmlSource, /<form id="chatForm"/);
+  assert.match(htmlSource, /id="sendBtn" type="button"/);
+  assert.match(appSource, /\$\('sendBtn'\)\.addEventListener\('click', submitCurrentMessage\)/);
+});
+
+test('chat and batch requests verify the local Node API before calling the model', () => {
+  assert.match(appSource, /async function checkBackendConnection\(\)/);
+  assert.match(appSource, /fetch\('\/api\/health'/);
+  assert.match(appSource, /请在项目目录运行 npm start/);
+  assert.match(appSource, /const backend = await checkBackendConnection\(\)/);
+});
+
+test('provider requests do not silently follow 3xx redirects', () => {
+  assert.equal((serverSource.match(/redirect: 'manual'/g) || []).length, 2);
+  assert.match(serverSource, /重定向地址：/);
+  assert.match(serverSource, /HTTP '\s*\+ upstream\.status/);
 });
