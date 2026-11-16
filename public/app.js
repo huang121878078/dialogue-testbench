@@ -196,39 +196,55 @@ let runnerResults = [];
 const normalizeImportedSuite = window.DialogueSuiteUtils && window.DialogueSuiteUtils.normalizeImportedSuite;
 
 function loadConfig() {
-  // Start with working provider defaults, then overlay the user's saved values.
   $('baseUrl').value = DEFAULT_CONFIG.baseUrl;
   $('model').value = DEFAULT_CONFIG.model;
-
+  let saved = {};
   try {
-    const saved = JSON.parse(localStorage.getItem('dt-config') || '{}');
+    saved = JSON.parse(localStorage.getItem('dt-config') || '{}');
     for (const id of fields) {
       if (saved[id] !== undefined) {
         if ($(id).type === 'checkbox') $(id).checked = saved[id];
         else $(id).value = saved[id];
       }
     }
+    promptTemplateVersion = Number(saved.promptTemplateVersion) || 0;
   } catch (error) {
     consoleLog('warn', 'config.load_failed', summarizeError(error));
   }
-  consoleLog('info', 'config.loaded', {
-    hasApiKey: Boolean($('apiKey').value.trim()),
-    baseUrl: safeBaseUrlForLog($('baseUrl').value),
-    model: $('model').value.trim() || '(missing)'
-  });
 
-  // An old saved empty value should not erase the provider defaults.
   if (!$('baseUrl').value.trim()) $('baseUrl').value = DEFAULT_CONFIG.baseUrl;
   if (!$('model').value.trim()) $('model').value = DEFAULT_CONFIG.model;
   if (!$('analysisPrompt').value.trim()) $('analysisPrompt').value = DEFAULT_ANALYSIS_PROMPT;
   if (!$('systemPrompt').value.trim()) $('systemPrompt').value = DEFAULT_SYSTEM_PROMPT;
   if (!$('persona').value.trim()) $('persona').value = DEFAULT_PERSONA;
+  if (!$('characterCore').value.trim()) $('characterCore').value = DEFAULT_CHARACTER_CORE;
+  if (!$('characterState').value.trim()) $('characterState').value = DEFAULT_CHARACTER_STATE;
+
+  const hasSavedPrompt = Boolean(saved.systemPrompt || saved.persona || saved.analysisPrompt);
+  $('templateUpgradeNotice').hidden = hasSavedPrompt && promptTemplateVersion >= CURRENT_PROMPT_TEMPLATE_VERSION ? true : hasSavedPrompt;
+  if (hasSavedPrompt && promptTemplateVersion < CURRENT_PROMPT_TEMPLATE_VERSION) {
+    $('templateUpgradeNotice').hidden = false;
+    consoleLog('warn', 'config.legacy_prompt_detected', {
+      savedPromptVersion: promptTemplateVersion,
+      currentPromptVersion: CURRENT_PROMPT_TEMPLATE_VERSION
+    });
+  } else {
+    $('templateUpgradeNotice').hidden = true;
+  }
+
+  consoleLog('info', 'config.loaded', {
+    hasApiKey: Boolean($('apiKey').value.trim()),
+    baseUrl: safeBaseUrlForLog($('baseUrl').value),
+    model: $('model').value.trim() || '(missing)',
+    promptTemplateVersion
+  });
   $('tempValue').textContent = $('temperature').value;
 }
 
 function saveConfig(silent = false) {
   const data = {};
   for (const id of fields) data[id] = $(id).type === 'checkbox' ? $(id).checked : $(id).value;
+  data.promptTemplateVersion = promptTemplateVersion;
   try {
     localStorage.setItem('dt-config', JSON.stringify(data));
     if (!silent) $('status').textContent = '配置已保存';
@@ -287,7 +303,9 @@ function getClientTimeContext() {
 function buildMessages() {
   const system = [];
   if ($('systemPrompt').value.trim()) system.push($('systemPrompt').value.trim());
-  if ($('persona').value.trim()) system.push('【角色设定】\n' + $('persona').value.trim());
+  if ($('persona').value.trim()) system.push('【角色表达设定】\n' + $('persona').value.trim());
+  if ($('characterCore').value.trim()) system.push('【角色稳定核心·学习流程不可自动改写】\n' + $('characterCore').value.trim());
+  if ($('characterState').value.trim()) system.push('【角色动态状态·只允许作为已确认的状态读取】\n' + $('characterState').value.trim());
   if ($('useExtra').checked && $('extra').value.trim()) system.push('【附加上下文】\n' + $('extra').value.trim());
   const messages = [];
   if (system.length) messages.push({ role: 'system', content: system.join('\n\n') });
@@ -435,6 +453,8 @@ async function sendMessage(text, options = {}) {
         messages: messages,
         dynamicAnalysis: $('useDynamicAnalysis').checked,
         analysisPrompt: $('analysisPrompt').value,
+        characterCore: $('characterCore').value,
+        characterState: $('characterState').value,
         clientTime,
         stream: true
       })
@@ -531,9 +551,13 @@ for (const id of fields) {
 $('resetCompanionDefaults').addEventListener('click', () => {
   $('systemPrompt').value = DEFAULT_SYSTEM_PROMPT;
   $('persona').value = DEFAULT_PERSONA;
+  $('characterCore').value = DEFAULT_CHARACTER_CORE;
+  $('characterState').value = DEFAULT_CHARACTER_STATE;
   $('analysisPrompt').value = DEFAULT_ANALYSIS_PROMPT;
-  saveConfig();
-  $('status').textContent = '已恢复岚汐默认陪伴模板';
+  promptTemplateVersion = CURRENT_PROMPT_TEMPLATE_VERSION;
+  $('templateUpgradeNotice').hidden = true;
+  saveConfig(true);
+  $('status').textContent = '已应用新版岚汐模板（v' + CURRENT_PROMPT_TEMPLATE_VERSION + '）';
 });
 $('temperature').addEventListener('input', () => $('tempValue').textContent = $('temperature').value);
 $('clearChat').addEventListener('click', () => {
