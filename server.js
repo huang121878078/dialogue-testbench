@@ -210,6 +210,12 @@ function normalizeIntensity(value) {
   return Math.max(0, Math.min(3, Math.round(number)));
 }
 
+function keepQuotedEvidence(value, sourceMessage) {
+  if (typeof value !== 'string' || typeof sourceMessage !== 'string') return '';
+  const evidence = value.trim().slice(0, 160);
+  return evidence && sourceMessage.includes(evidence) ? evidence : '';
+}
+
 function parseCharacterState(value) {
   if (value && typeof value === 'object' && !Array.isArray(value)) return value;
   if (typeof value !== 'string' || !value.trim()) return {};
@@ -421,13 +427,13 @@ function normalizeAnalysis(parsed, options = {}) {
       confidence: intentType !== modelIntentType && intentType !== 'unclear' ? 0.98 : intentConfidence,
       evidence: intentType !== modelIntentType && intentType !== 'unclear'
         ? message.slice(0, 160)
-        : typeof intent === 'object' && typeof intent.evidence === 'string' ? intent.evidence.slice(0, 160) : ''
+        : keepQuotedEvidence(typeof intent === 'object' ? intent.evidence : '', message)
     },
     userEmotion: {
       type: normalizedEmotion,
       intensity: normalizeIntensity(typeof emotion === 'object' ? emotion.intensity : 0),
       confidence: emotionConfidence,
-      evidence: typeof emotion === 'object' && typeof emotion.evidence === 'string' ? emotion.evidence.slice(0, 160) : ''
+      evidence: keepQuotedEvidence(typeof emotion === 'object' ? emotion.evidence : '', message)
     },
     speechAct: SPEECH_ACTS.has(inferredSpeechAct) ? inferredSpeechAct : 'unclear',
     interactionMode: INTERACTION_MODES.has(inferredMode) ? inferredMode : 'casual',
