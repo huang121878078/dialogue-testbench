@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const {
   normalizeEndpoint,
   safeEndpointForLog,
+  sanitizeLogValue,
   parseModelJson,
   normalizeAnalysis,
   buildTimeContext,
@@ -26,6 +27,19 @@ test('safe endpoint logs omit URL credentials and query parameters', () => {
     safeEndpointForLog('https://user:secret@example.com/v1?api_key=do-not-log'),
     'https://example.com/v1'
   );
+});
+
+test('log sanitization redacts API keys, bearer tokens and credential query parameters', () => {
+  const sanitized = sanitizeLogValue({
+    apiKey: 'sk-test-secret',
+    authorization: 'Bearer token-secret',
+    endpoint: 'https://example.com/v1?api_key=query-secret',
+    detail: 'request failed with Bearer response-secret'
+  });
+  assert.equal(sanitized.apiKey, '[REDACTED]');
+  assert.equal(sanitized.authorization, '[REDACTED]');
+  assert.equal(sanitized.endpoint, 'https://example.com/v1?api_key=[REDACTED]');
+  assert.equal(sanitized.detail, 'request failed with Bearer [REDACTED]');
 });
 
 test('parses plain and fenced JSON model output', () => {
