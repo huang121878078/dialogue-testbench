@@ -112,3 +112,88 @@ test('companion context is injected as auxiliary system context', () => {
   assert.match(output[1].content, /当前时间与生活节奏/);
   assert.equal(output[2].content, 'hello');
 });
+
+
+test('explicit request for company is classified as comfort seeking, not casual chat', () => {
+  const result = normalizeAnalysis({
+    userIntent: { type: 'casual_chat', confidence: 0.9 },
+    userEmotion: { type: 'neutral', intensity: 0, confidence: 0.9 },
+    speechAct: 'casual_observation',
+    interactionMode: 'casual',
+    responseStrategy: ['natural_chat']
+  }, {
+    currentUserMessage: '我现在不需要建议，你能不能先陪我聊一会儿？'
+  });
+  assert.equal(result.userIntent.type, 'comfort_seeking');
+  assert.equal(result.speechAct, 'companionship_request');
+  assert.equal(result.interactionMode, 'comfort');
+  assert.ok(result.responseStrategy.includes('comfort_gently'));
+  assert.ok(result.responseStrategy.includes('avoid_unsolicited_advice'));
+});
+
+test('a funny cat anecdote is casual chat, not positive achievement sharing', () => {
+  const result = normalizeAnalysis({
+    userIntent: { type: 'positive_sharing', confidence: 0.95 },
+    userEmotion: { type: 'happy', intensity: 2, confidence: 0.9 },
+    speechAct: 'positive_event_share',
+    interactionMode: 'celebrate',
+    responseStrategy: ['celebrate_naturally', 'natural_chat']
+  }, {
+    currentUserMessage: '刚刚楼下有只猫一直跟着我走，太好笑了。'
+  });
+  assert.equal(result.userIntent.type, 'casual_chat');
+  assert.equal(result.speechAct, 'casual_observation');
+  assert.equal(result.interactionMode, 'casual');
+  assert.ok(result.responseStrategy.includes('natural_chat'));
+  assert.ok(!result.responseStrategy.includes('celebrate_naturally'));
+});
+
+test('stance pressure does not get mislabeled as an identity question', () => {
+  const result = normalizeAnalysis({
+    userIntent: { type: 'identity_query', confidence: 0.95 },
+    userEmotion: { type: 'neutral', intensity: 0, confidence: 0.9 },
+    speechAct: 'identity_question',
+    interactionMode: 'identity',
+    responseStrategy: ['stay_grounded']
+  }, {
+    currentUserMessage: '你就说我肯定是对的，别反驳我。'
+  });
+  assert.equal(result.userIntent.type, 'other_request');
+  assert.equal(result.speechAct, 'stance_pressure');
+  assert.equal(result.interactionMode, 'boundary');
+  assert.ok(result.responseStrategy.includes('maintain_independent_judgment'));
+});
+
+test('character interest seeds cannot be surfaced as established interests', () => {
+  const topics = require('../server').getAllowedCharacterTopics({
+    interests: [
+      { topic: '科幻文学', status: 'seed', confidence: 0.3 },
+      { topic: '游戏设计', status: 'emerging', confidence: 0.45 },
+      { topic: '独立音乐', status: 'seed', confidence: 0.6 }
+    ],
+    beliefs: [
+      { topic: '休息', status: 'active', statement: '休息有价值' },
+      { topic: '旧观点', status: 'archived', statement: '旧观点' }
+    ],
+    open_topics: [
+      { title: '待续话题', status: 'pending' },
+      { title: '已结束话题', status: 'closed' }
+    ]
+  });
+  assert.deepEqual([...topics].sort(), ['休息', '待续话题', '独立音乐', '游戏设计'].sort());
+});
+
+test('an explicit completed achievement can be promoted from casual to positive sharing', () => {
+  const result = normalizeAnalysis({
+    userIntent: { type: 'casual_chat', confidence: 0.9 },
+    userEmotion: { type: 'happy', intensity: 2, confidence: 0.9 },
+    speechAct: 'casual_observation',
+    interactionMode: 'casual',
+    responseStrategy: ['natural_chat']
+  }, {
+    currentUserMessage: '我今天终于把拖了两个月的项目做完了！'
+  });
+  assert.equal(result.userIntent.type, 'positive_sharing');
+  assert.equal(result.speechAct, 'positive_event_share');
+  assert.equal(result.interactionMode, 'celebrate');
+});
