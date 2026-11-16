@@ -88,5 +88,6 @@ test('reports missing analysis fields and aggregates suite evaluation accurately
   assert.equal(summary.caseCount, 2);
   assert.equal(summary.requestFailures, 1);
   assert.deepEqual(summary.analysisChecks, { passed: 0, failed: 3, total: 3 });
+  assert.deepEqual(summary.requestChecks, { passed: 0, failed: 1, total: 1 });
   assert.equal(summary.manualChecksPending, 1);
 });
