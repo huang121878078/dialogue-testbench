@@ -78,3 +78,10 @@ test('server logs API request ids and provider request lifecycle without raw cre
   assert.match(serverSource, /safeEndpointForLog\(baseUrl\)/);
   assert.doesNotMatch(serverSource, /apiKey:\s*apiKey/);
 });
+
+test('browser console logger sanitizes sensitive fields and bearer tokens', () => {
+  assert.match(appSource, /function sanitizeConsoleValue\(/);
+  assert.match(appSource, /\(api\.?key\|authorization\|password\|secret\|access\.?token\)/);
+  assert.match(appSource, /Bearer \[REDACTED\]/);
+  assert.match(appSource, /...sanitizeConsoleValue\(details\)/);
+});
