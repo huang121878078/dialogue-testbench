@@ -28,7 +28,7 @@ test('batch runner reports why it cannot start instead of silently returning', (
 });
 
 test('frontend bootstrap loads versioned scripts and reports resource errors', () => {
-  assert.match(htmlSource, /const version = '20261116-11'/);
+  assert.match(htmlSource, /const version = '20261116-13'/);
   assert.match(htmlSource, /function loadScript\(fileName\)/);
   assert.match(htmlSource, /loadScript\('suite-utils\.js'\)/);
   assert.match(htmlSource, /loadScript\('app\.js'\)/);
@@ -41,7 +41,8 @@ test('frontend bootstrap loads versioned scripts and reports resource errors', (
 test('suite utility is scoped and does not collide with app.js global lexical declarations', () => {
   assert.match(fs.readFileSync(path.join(__dirname, '../public/suite-utils.js'), 'utf8'), /^\(function exposeDialogueSuiteUtils\(root\)/);
   assert.match(fs.readFileSync(path.join(__dirname, '../public/suite-utils.js'), 'utf8'), /root\.DialogueSuiteUtils = api/);
-  assert.match(appSource, /const normalizeImportedSuite = window\.DialogueSuiteUtils/);
+  assert.match(appSource, /const suiteUtils = window\.DialogueSuiteUtils/);
+  assert.match(appSource, /const evaluateCaseResult = suiteUtils\.evaluateCaseResult/);
 });
 
 test('index document disables browser caching so deployed bootstrap updates are picked up', () => {
@@ -112,6 +113,25 @@ test('server logs process-level and JSON middleware errors', () => {
 test('header distinguishes an unstarted frontend from backend disconnection', () => {
   assert.match(htmlSource, /id="status" class="status">前端脚本未运行</);
   assert.match(appSource, /前端脚本已加载，正在初始化/);
-  assert.match(htmlSource, /app\.js\?v=20261116-9[^>]*onerror=/);
-  assert.match(htmlSource, /suite-utils\.js\?v=20261116-9[^>]*onerror=/);
+  assert.match(htmlSource, /bootstrap\.resource_failed/);
+  assert.match(htmlSource, /bootstrap\.runtime_error/);
+  assert.match(htmlSource, /loadScript\('app\.js'\)/);
+  assert.match(htmlSource, /loadScript\('suite-utils\.js'\)/);
+});
+
+
+test('batch runner attaches deterministic analysis evaluation and labels manual checks pending', () => {
+  const suiteUtilsSource = fs.readFileSync(path.join(__dirname, '../public/suite-utils.js'), 'utf8');
+  assert.match(suiteUtilsSource, /function evaluateCaseResult\(/);
+  assert.match(suiteUtilsSource, /function summarizeSuiteResults\(/);
+  assert.match(appSource, /resultRecord\.evaluation = typeof evaluateCaseResult/);
+  assert.match(appSource, /evaluationNote: '自动评估只比较 expectedIntent、expectedEmotion 和 expectedStrategies/);
+  assert.match(appSource, /analysisChecks: suiteSummary\.analysisChecks/);
+});
+
+test('default companion prompt template is versioned and keeps role layers distinct', () => {
+  assert.match(appSource, /CURRENT_PROMPT_TEMPLATE_VERSION = 3/);
+  assert.match(appSource, /兴趣种子（seed）只是探索方向/);
+  assert.match(appSource, /不自动附加喝水、休息或庆祝任务/);
+  assert.match(appSource, /只有 emerging\/established 或 confidence>=0\.5 的兴趣允许被引用/);
 });
