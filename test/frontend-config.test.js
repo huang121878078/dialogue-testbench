@@ -27,6 +27,6 @@ test('batch runner reports why it cannot start instead of silently returning', (
 });
 
 test('browser cache is busted for updated frontend scripts', () => {
-  assert.match(htmlSource, /suite-utils\.js\?v=20261116-2/);
-  assert.match(htmlSource, /app\.js\?v=20261116-2/);
+  assert.match(htmlSource, /suite-utils\.js\?v=20261116-3/);
+  assert.match(htmlSource, /app\.js\?v=20261116-3/);
 });
