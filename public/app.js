@@ -158,7 +158,7 @@ const DEFAULT_ANALYSIS_PROMPT = [
   '情绪为 sad、happy、angry、anxious、tired、confused、neutral、mixed、unclear。犹豫/考虑选择不自动等于 confused，忙完不自动等于 tired；证据不足使用 unclear 或 neutral。evidence 仅引用用户表达。',
   'responseStrategy 从 listen_first、acknowledge_emotion、comfort_gently、celebrate_naturally、explore_with_user、offer_practical_help、offer_gentle_advice、natural_chat、respect_withdrawal、ask_one_open_question、validate_without_assuming、avoid_unsolicited_advice、maintain_independent_judgment、stay_grounded、be_concise 中选 1-3 个，不要堆标签。未请求建议时不要添加 advice 或 practical-help 策略。',
   'adviceLevel 从 none、low、medium、high 中选。venting、comfort_seeking、positive_sharing、casual_chat、withdrawal、identity_query 默认 none；advice_seeking 默认 low；daily_life_support 默认 low。',
-  '角色核心 characterCore 定义稳定身份/价值/边界；characterState 定义角色自己的兴趣、观点和待续话题。兴趣 status=seed 只是探索种子，不能当成已形成的兴趣；只有 emerging/established 或 confidence>=0.5 的兴趣允许被引用。观点仅使用 active（或旧数据中未标记 status）的观点。characterContribution 只能引用 characterState 中符合条件的 topic，输出 hasContribution、topic、stance、basis、strength、initiative、initiativeMove。strength=strong/lean/uncertain/none；initiative=low/moderate/high；initiativeMove=none/share_opinion/continue_topic/explore/share_interest。',
+  '角色核心 characterCore 定义稳定身份/价值/边界；characterState 定义角色自己的兴趣、观点和待续话题。兴趣 status=seed 只是探索种子，不能当成已形成的兴趣；只有 emerging/established 或 confirmed=true 的兴趣允许被引用。旧数据只有在没有 status 字段时，才可用 confidence>=0.5 作为兼容判断。观点仅使用 active（或旧数据中未标记 status）的观点。characterContribution 只能引用 characterState 中符合条件的 topic，并提供具体 stance，不能只报兴趣名称；输出 hasContribution、topic、stance、basis、strength、initiative、initiativeMove。strength=strong/lean/uncertain/none；initiative=low/moderate/high；initiativeMove=none/share_opinion/continue_topic/explore/share_interest。',
   '用户倾诉、明确寻求陪伴、情绪脆弱、退出话题或询问身份时，characterContribution 必须为 false，不主动输出角色观点。其他场景只有在自然相关时才输出，不要每轮展示人格。不得编造新兴趣、观点、生活经历或现实环境。',
   '只返回合法 JSON。结构：{"userIntent":{"type":"casual_chat","confidence":0.9,"evidence":"用户分享轻松趣事"},"userEmotion":{"type":"happy","intensity":1,"confidence":0.8,"evidence":"用户说太好笑了"},"speechAct":"casual_observation","interactionMode":"casual","adviceLevel":"none","responseStrategy":["natural_chat"],"characterContribution":{"hasContribution":false,"topic":"","stance":"","basis":"","strength":"none","initiative":"low","initiativeMove":"none"}}'
 ] .join('\n');
@@ -679,7 +679,12 @@ $('runSuite').addEventListener('click', async () => {
       };
       resultRecord.evaluation = typeof evaluateCaseResult === 'function'
         ? evaluateCaseResult(item, resultRecord)
-        : { warning: '当前测试集工具版本不支持自动评估', automatedChecks: [], manualChecks: item.checks || [] };
+        : {
+          warning: '当前测试集工具版本不支持自动评估',
+          automatedChecks: [],
+          manualChecks: (item.checks || []).map(criterion => ({ criterion, status: 'pending' })),
+          summary: { passed: 0, failed: 0, pending: (item.checks || []).length, notApplicable: 3 }
+        };
       runnerResults.push(resultRecord);
       consoleLog(assistant && assistant.error ? 'error' : 'info', 'suite.case.finished', {
         index: index + 1, total, id: item.id, error: Boolean(assistant && assistant.error),
@@ -701,7 +706,14 @@ $('runSuite').addEventListener('click', async () => {
     $('stopSuite').disabled = true;
     const suiteSummary = typeof summarizeSuiteResults === 'function'
       ? summarizeSuiteResults(runnerResults)
-      : { caseCount: runnerResults.length, requestFailures: runnerResults.filter(item => item.error).length };
+      : {
+          caseCount: runnerResults.length,
+          requestFailures: runnerResults.filter(item => item.error).length,
+          analysisChecks: { passed: 0, failed: 0, total: 0 },
+          requestChecks: { passed: 0, failed: 0, total: 0 },
+          manualChecksPending: runnerResults.reduce((total, item) =>
+            total + (item.evaluation && item.evaluation.manualChecks ? item.evaluation.manualChecks.length : 0), 0)
+        };
     if (runnerResults.length) {
       const blob = new Blob([JSON.stringify({
         suite: importedSuite.name,
