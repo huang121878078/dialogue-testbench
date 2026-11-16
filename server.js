@@ -486,6 +486,7 @@ module.exports = {
   STRATEGIES,
   normalizeEndpoint,
   safeEndpointForLog,
+  sanitizeLogValue,
   parseModelJson,
   normalizeAnalysis,
   buildTimeContext,
