@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#101522" />
   <title>Dialogue Testbench</title>
-  <link rel="stylesheet" href="/style.css" />
+  <link rel="stylesheet" href="style.css?v=20261116-4" />
 </head>
 <body>
   <header class="topbar"><div><span class="logo">DT</span><div><h1>Dialogue Testbench</h1><p>对话提示词与动态上下文测试台</p></div></div><span id="status" class="status">未连接</span></header>
@@ -45,7 +45,7 @@
         <p id="runnerStatus" class="hint" style="width:100%">导入测试集后，系统会逐题发送并在完成后导出结果。</p>
       </div>
       <div id="messages" class="messages"><div class="empty"><div class="empty-icon">✦</div><h3>开始测试你的角色</h3><p>配置模型和提示词，然后发送一条消息。</p></div></div>
-      <form id="chatForm" class="composer"><textarea id="userInput" rows="3" placeholder="输入你想测试的内容……（Enter 发送，Shift + Enter 换行）"></textarea><button id="sendBtn" type="submit">发送 ↗</button></form>
+      <div id="chatForm" class="composer"><textarea id="userInput" rows="3" placeholder="输入你想测试的内容……（Enter 发送，Shift + Enter 换行）"></textarea><button id="sendBtn" type="button">发送 ↗</button></div>
     </section>
     <aside class="panel inspector">
       <div class="panel-title"><h2>动态分析与请求检查</h2><button id="refreshPayload" class="subtle">刷新</button></div>
@@ -58,7 +58,7 @@
       <pre id="payload">发送消息后，这里会显示实际请求 JSON。</pre>
     </aside>
   </main>
-  <script src="/suite-utils.js?v=20261116-3"></script>
-  <script src="/app.js?v=20261116-3"></script>
+  <script src="suite-utils.js?v=20261116-4"></script>
+  <script src="app.js?v=20261116-4"></script>
 </body>
 </html>
