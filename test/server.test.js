@@ -180,7 +180,7 @@ test('character interest seeds cannot be surfaced as established interests', () 
       { title: '已结束话题', status: 'closed' }
     ]
   });
-  assert.deepEqual([...topics].sort(), ['休息', '待续话题', '独立音乐', '游戏设计'].sort());
+  assert.deepEqual([...topics].sort(), ['休息', '待续话题', '游戏设计'].sort());
 });
 
 test('an explicit completed achievement can be promoted from casual to positive sharing', () => {
@@ -196,4 +196,33 @@ test('an explicit completed achievement can be promoted from casual to positive 
   assert.equal(result.userIntent.type, 'positive_sharing');
   assert.equal(result.speechAct, 'positive_event_share');
   assert.equal(result.interactionMode, 'celebrate');
+});
+
+
+test('character contribution requires an allowed topic and a concrete stance', () => {
+  const base = {
+    userIntent: { type: 'casual_chat', confidence: 0.9 },
+    userEmotion: { type: 'neutral', intensity: 0, confidence: 0.9 },
+    responseStrategy: ['natural_chat'],
+    characterContribution: {
+      hasContribution: true,
+      topic: '游戏设计',
+      stance: '',
+      basis: '角色的当前观点',
+      strength: 'lean',
+      initiative: 'moderate',
+      initiativeMove: 'share_opinion'
+    }
+  };
+  const state = {
+    interests: [{ topic: '游戏设计', status: 'established', confidence: 0.8 }],
+    beliefs: []
+  };
+  const empty = normalizeAnalysis(base, { currentUserMessage: '聊聊游戏吧', characterState: state });
+  assert.equal(empty.characterContribution.hasContribution, false);
+
+  base.characterContribution.stance = '我更在意玩法深度，而不是地图有多大。';
+  const valid = normalizeAnalysis(base, { currentUserMessage: '聊聊游戏吧', characterState: state });
+  assert.equal(valid.characterContribution.hasContribution, true);
+  assert.equal(valid.characterContribution.topic, '游戏设计');
 });
