@@ -85,3 +85,9 @@ test('browser console logger sanitizes sensitive fields and bearer tokens', () =
   assert.match(appSource, /Bearer \[REDACTED\]/);
   assert.match(appSource, /...sanitizeConsoleValue\(details\)/);
 });
+
+test('server logs process-level and JSON middleware errors', () => {
+  assert.match(serverSource, /process\.on\('unhandledRejection'/);
+  assert.match(serverSource, /process\.on\('uncaughtExceptionMonitor'/);
+  assert.match(serverSource, /http\.middleware\.error/);
+});
