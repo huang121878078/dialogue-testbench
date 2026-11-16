@@ -150,7 +150,7 @@ function handleStreamData(data, assistant) {
   } catch {}
 }
 
-async function sendMessage(text) {
+async function sendMessage(text, options = {}) {
   if (busy || !text.trim()) return;
   if (!$('baseUrl').value.trim() || !$('apiKey').value.trim() || !$('model').value.trim()) {
     $('status').textContent = '请先完成模型配置';
@@ -165,7 +165,8 @@ async function sendMessage(text) {
   $('analysisStatus').textContent = '正在分析本轮消息…';
   $('analysisStatus').className = 'analysis-status';
   $('analysisResult').textContent = '等待分析结果…';
-  showPayload({ dynamicAnalysis: $('useDynamicAnalysis').checked, clientTime: getClientTimeContext(), messages: messages });
+  const clientTime = options.clientTime || getClientTimeContext();
+  showPayload({ dynamicAnalysis: $('useDynamicAnalysis').checked, clientTime, messages: messages });
   const assistant = { role: 'assistant', content: '' };
   history.push(assistant);
   render();
@@ -182,7 +183,7 @@ async function sendMessage(text) {
         messages: messages,
         dynamicAnalysis: $('useDynamicAnalysis').checked,
         analysisPrompt: $('analysisPrompt').value,
-        clientTime: getClientTimeContext(),
+        clientTime,
         stream: true
       })
     });
@@ -335,7 +336,7 @@ $('runSuite').addEventListener('click', async () => {
         render();
       }
       updateRunnerStatus('正在执行 ' + (index + 1) + '/' + total + '：' + item.title);
-      const assistant = await sendMessage(item.userMessage);
+      const assistant = await sendMessage(item.userMessage, { clientTime: item.timeContext || null });
       runnerResults.push({
         id: item.id,
         title: item.title,
