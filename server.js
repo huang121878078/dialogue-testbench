@@ -192,9 +192,15 @@ async function runDynamicAnalysis(endpoint, apiKey, model, messages, analysisPro
   const analysisMessages = buildAnalysisMessages(messages, analysisPrompt, timeContext);
   const response = await fetch(endpoint, {
     method: 'POST',
+    redirect: 'manual',
     headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
     body: JSON.stringify({ model, messages: analysisMessages, temperature: 0.1, stream: false })
   });
+  if (response.status >= 300 && response.status < 400) {
+    const location = response.headers.get('location') || '(响应未提供 Location)';
+    const detail = await response.text().catch(() => '');
+    throw new Error('分析接口返回 HTTP ' + response.status + ' 重定向到 ' + location + '。服务端已停止自动跳转，以避免 POST 请求或鉴权信息丢失。' + (detail ? ' ' + detail.slice(0, 500) : ''));
+  }
   if (!response.ok) {
     const detail = await response.text();
     throw new Error('分析请求返回 ' + response.status + ': ' + detail.slice(0, 1200));
@@ -262,12 +268,23 @@ app.post('/api/chat', async (req, res) => {
   try {
     const upstream = await fetch(endpoint, {
       method: 'POST',
+      redirect: 'manual',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + apiKey },
       body: JSON.stringify(responseRequest)
     });
+    if (upstream.status >= 300 && upstream.status < 400) {
+      const location = upstream.headers.get('location') || '(响应未提供 Location)';
+      const detail = await upstream.text().catch(() => '');
+      return res.status(502).json({
+        error: '模型接口返回了 HTTP ' + upstream.status + ' 重定向，服务端已停止自动跳转。',
+        detail: '请求地址：' + endpoint + '\n重定向地址：' + location + '\n' +
+          '如果你的百炼 API Key 属于新加坡地域，请确认是否应使用新加坡地域专属 Base URL。' +
+          (detail ? '\n响应内容：' + detail.slice(0, 1500) : '')
+      });
+    }
     if (!upstream.ok) {
       const detail = await upstream.text();
-      return res.status(upstream.status).json({ error: '模型服务返回 ' + upstream.status, detail: detail.slice(0, 6000), analysis, analysisWarning });
+      return res.status(upstream.status).json({ error: '模型服务返回 ' + upstream.status, detail: '请求地址：' + endpoint + '\n' + detail.slice(0, 6000), analysis, analysisWarning });
     }
 
     if (!stream) {
