@@ -175,7 +175,10 @@ let busy = false;
 let importedSuite = null;
 let runnerActive = false;
 let runnerResults = [];
-const normalizeImportedSuite = window.DialogueSuiteUtils && window.DialogueSuiteUtils.normalizeImportedSuite;
+const suiteUtils = window.DialogueSuiteUtils || {};
+const normalizeImportedSuite = suiteUtils.normalizeImportedSuite;
+const evaluateCaseResult = suiteUtils.evaluateCaseResult;
+const summarizeSuiteResults = suiteUtils.summarizeSuiteResults;
 
 function loadConfig() {
   $('baseUrl').value = DEFAULT_CONFIG.baseUrl;
@@ -659,7 +662,7 @@ $('runSuite').addEventListener('click', async () => {
       updateRunnerStatus('正在执行 ' + (index + 1) + '/' + total + '：' + item.title);
       const caseStartedAt = performance.now();
       const assistant = await sendMessage(item.userMessage, { clientTime: item.timeContext || null });
-      runnerResults.push({
+      const resultRecord = {
         id: item.id,
         title: item.title,
         category: item.category,
@@ -673,7 +676,11 @@ $('runSuite').addEventListener('click', async () => {
         error: assistant ? Boolean(assistant.error) : true,
         analysis: latestAnalysis,
         completedAt: new Date().toISOString()
-      });
+      };
+      resultRecord.evaluation = typeof evaluateCaseResult === 'function'
+        ? evaluateCaseResult(item, resultRecord)
+        : { warning: '当前测试集工具版本不支持自动评估', automatedChecks: [], manualChecks: item.checks || [] };
+      runnerResults.push(resultRecord);
       consoleLog(assistant && assistant.error ? 'error' : 'info', 'suite.case.finished', {
         index: index + 1, total, id: item.id, error: Boolean(assistant && assistant.error),
         responseLength: assistant && assistant.content ? assistant.content.length : 0,
@@ -692,11 +699,16 @@ $('runSuite').addEventListener('click', async () => {
     runnerActive = false;
     $('runSuite').disabled = !importedSuite;
     $('stopSuite').disabled = true;
+    const suiteSummary = typeof summarizeSuiteResults === 'function'
+      ? summarizeSuiteResults(runnerResults)
+      : { caseCount: runnerResults.length, requestFailures: runnerResults.filter(item => item.error).length };
     if (runnerResults.length) {
       const blob = new Blob([JSON.stringify({
         suite: importedSuite.name,
         executedAt: new Date().toISOString(),
         isolatedCases: isolated,
+        summary: suiteSummary,
+        evaluationNote: '自动评估只比较 expectedIntent、expectedEmotion 和 expectedStrategies；checks 中的回复质量标准仍需人工复核，不代表模型回复已通过。',
         results: runnerResults
       }, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -710,12 +722,17 @@ $('runSuite').addEventListener('click', async () => {
     consoleLog('info', 'suite.run.finished', {
       completed: runnerResults.length, total, stopped,
       failedCases: runnerResults.filter(result => result.error).length,
+      analysisChecks: suiteSummary.analysisChecks,
       durationMs: Math.round(performance.now() - suiteStartedAt), exported: runnerResults.length > 0
     });
+    const evaluationText = runnerResults.length
+      ? '分析自动校验通过 ' + suiteSummary.analysisChecks.passed + '/' +
+        suiteSummary.analysisChecks.total + ' 项；回复质量标准待人工复核。'
+      : '';
     updateRunnerStatus(
       (stopped ? '已停止：' : '执行结束：') +
       runnerResults.length + '/' + total + ' 题。' +
-      (runnerResults.length ? '结果 JSON 已导出。' : '没有生成结果文件，请检查配置。')
+      (runnerResults.length ? evaluationText + ' 结果 JSON 已导出。' : '没有生成结果文件，请检查配置。')
     );
   }
 });
