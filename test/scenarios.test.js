@@ -4,7 +4,7 @@ const scenarios = require('./companion-scenarios.json');
 
 const VALID_INTENTS = new Set([
   'venting', 'comfort_seeking', 'advice_seeking', 'positive_sharing',
-  'daily_life_support', 'casual_chat', 'withdrawal', 'other_request', 'unclear'
+  'daily_life_support', 'casual_chat', 'withdrawal', 'identity_query', 'other_request', 'unclear'
 ]);
 const VALID_EMOTIONS = new Set([
   'sad', 'happy', 'angry', 'anxious', 'tired', 'confused',
@@ -22,6 +22,10 @@ test('companion regression scenarios have unique ids and usable assertions', () 
     if (scenario.expectedIntent) assert.ok(VALID_INTENTS.has(scenario.expectedIntent), scenario.id);
     if (scenario.expectedEmotion) assert.ok(VALID_EMOTIONS.has(scenario.expectedEmotion), scenario.id);
     if (scenario.expectedStrategies) assert.ok(scenario.expectedStrategies.every(value => typeof value === 'string'), scenario.id);
+    if (scenario.timeContext) {
+      assert.ok(!Number.isNaN(Date.parse(scenario.timeContext.timestamp)), scenario.id + ' timeContext.timestamp');
+      assert.ok(typeof scenario.timeContext.timeZone === 'string' && scenario.timeContext.timeZone, scenario.id + ' timeContext.timeZone');
+    }
   }
 });
 
