@@ -55,7 +55,92 @@ function normalizeImportedSuite(data) {
   };
 }
 
-const api = { normalizeImportedSuite };
+function evaluateCaseResult(testCase, result = {}) {
+  const analysis = result.analysis && typeof result.analysis === 'object' ? result.analysis : {};
+  const actualIntent = analysis.userIntent && analysis.userIntent.type || null;
+  const actualEmotion = analysis.userEmotion && analysis.userEmotion.type || null;
+  const actualStrategies = Array.isArray(analysis.responseStrategy) ? analysis.responseStrategy : [];
+  const automatedChecks = [];
+
+  if (testCase.expectedIntent) {
+    automatedChecks.push({
+      key: 'intent',
+      label: '意图识别',
+      status: actualIntent === testCase.expectedIntent ? 'pass' : 'fail',
+      expected: testCase.expectedIntent,
+      actual: actualIntent
+    });
+  }
+
+  if (testCase.expectedEmotion) {
+    automatedChecks.push({
+      key: 'emotion',
+      label: '情绪识别',
+      status: actualEmotion === testCase.expectedEmotion ? 'pass' : 'fail',
+      expected: testCase.expectedEmotion,
+      actual: actualEmotion
+    });
+  }
+
+  if (Array.isArray(testCase.expectedStrategies) && testCase.expectedStrategies.length > 0) {
+    const missing = testCase.expectedStrategies.filter(tag => !actualStrategies.includes(tag));
+    automatedChecks.push({
+      key: 'strategies',
+      label: '响应策略',
+      status: missing.length === 0 ? 'pass' : 'fail',
+      expected: [...testCase.expectedStrategies],
+      actual: actualStrategies,
+      missing
+    });
+  }
+
+  if (result.error) {
+    automatedChecks.push({
+      key: 'request',
+      label: '请求执行',
+      status: 'fail',
+      expected: '模型请求成功',
+      actual: '请求失败'
+    });
+  }
+
+  const manualChecks = (Array.isArray(testCase.checks) ? testCase.checks : []).map(criterion => ({
+    criterion: String(criterion),
+    status: 'pending'
+  }));
+  const passed = automatedChecks.filter(check => check.status === 'pass').length;
+  const failed = automatedChecks.filter(check => check.status === 'fail').length;
+
+  return {
+    automatedChecks,
+    manualChecks,
+    summary: {
+      passed,
+      failed,
+      pending: manualChecks.length,
+      notApplicable: 3 - automatedChecks.filter(check => ['intent', 'emotion', 'strategies'].includes(check.key)).length
+    }
+  };
+}
+
+function summarizeSuiteResults(results) {
+  const items = Array.isArray(results) ? results : [];
+  const checks = items.flatMap(item => item.evaluation && Array.isArray(item.evaluation.automatedChecks)
+    ? item.evaluation.automatedChecks
+    : []);
+  const passed = checks.filter(check => check.status === 'pass').length;
+  const failed = checks.filter(check => check.status === 'fail').length;
+  const pendingManual = items.reduce((total, item) =>
+    total + (item.evaluation && item.evaluation.manualChecks ? item.evaluation.manualChecks.length : 0), 0);
+  return {
+    caseCount: items.length,
+    requestFailures: items.filter(item => item.error).length,
+    analysisChecks: { passed, failed, total: passed + failed },
+    manualChecksPending: pendingManual
+  };
+}
+
+const api = { normalizeImportedSuite, evaluateCaseResult, summarizeSuiteResults };
 
 if (typeof module !== 'undefined' && module.exports) {
   module.exports = api;
