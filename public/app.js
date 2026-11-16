@@ -1,10 +1,28 @@
 const $ = (id) => document.getElementById(id);
 
+function sanitizeConsoleValue(value, key = '') {
+  if (/(api.?key|authorization|password|secret|access.?token)/i.test(key)) {
+    return value ? '[REDACTED]' : value;
+  }
+  if (typeof value === 'string') {
+    return value
+      .replace(/\\bBearer\\s+[^\\s"'<>]+/gi, 'Bearer [REDACTED]')
+      .replace(/([?&](?:api[_-]?key|access_token|token)=)[^&\\s]*/gi, '$1[REDACTED]');
+  }
+  if (Array.isArray(value)) return value.map(item => sanitizeConsoleValue(item));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([childKey, childValue]) => [
+      childKey, sanitizeConsoleValue(childValue, childKey)
+    ]));
+  }
+  return value;
+}
+
 function consoleLog(level, event, details = {}) {
   const payload = {
     time: new Date().toISOString(),
     event,
-    ...details
+    ...sanitizeConsoleValue(details)
   };
   const logger = typeof console[level] === 'function' ? console[level] : console.log;
   logger.call(console, '[DialogueTestbench]', payload);
