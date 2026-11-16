@@ -33,6 +33,6 @@ test('baseline covers the companion product risk areas', () => {
   const categories = new Set(scenarios.map(item => item.category));
   for (const category of [
     'intent-and-boundaries', 'time-awareness', 'calibration',
-    'persona-stability', 'persona-boundary'
+    'persona-stability', 'persona-boundary', 'character-agency'
   ]) assert.ok(categories.has(category), 'missing category: ' + category);
 });
