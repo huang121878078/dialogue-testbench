@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#101522" />
+  <title>Dialogue Testbench</title>
+  <link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <header class="topbar"><div><span class="logo">DT</span><div><h1>Dialogue Testbench</h1><p>对话提示词与动态上下文测试台</p></div></div><span id="status" class="status">未连接</span></header>
+  <main class="layout">
+    <aside class="panel config">
+      <div class="panel-title"><h2>模型配置</h2><button id="saveConfig" class="subtle">保存配置</button></div>
+      <label>API Base URL<input id="baseUrl" placeholder="https://api.openai.com/v1" /></label>
+      <label>API Key<input id="apiKey" type="password" placeholder="sk-..." autocomplete="off" /></label>
+      <label>模型名称<input id="model" placeholder="gpt-4o-mini" /></label>
+      <label>Temperature <span id="tempValue">0.7</span><input id="temperature" type="range" min="0" max="2" step="0.1" value="0.7" /></label>
+      <div class="divider"></div>
+      <h2>提示词与上下文</h2>
+      <label>System Prompt<textarea id="systemPrompt" rows="7" placeholder="定义 AI 的核心行为规则……"></textarea></label>
+      <label>角色设定<textarea id="persona" rows="4" placeholder="定义角色的稳定人格、表达习惯……"></textarea></label>
+      <div class="divider"></div>
+      <h2>动态上下文注入</h2>
+      <label class="toggle"><input id="useIntent" type="checkbox" checked /> 用户意图</label>
+      <textarea id="intent" rows="2">倾诉</textarea>
+      <label class="toggle"><input id="useEmotion" type="checkbox" checked /> 用户情绪</label>
+      <textarea id="emotion" rows="3">{"type":"难过","intensity":2,"confidence":0.9}</textarea>
+      <label class="toggle"><input id="useStrategy" type="checkbox" checked /> 响应策略</label>
+      <textarea id="strategy" rows="4">["先回应用户明确表达的难过","暂时不急于提供解决方案","自然倾听，不连续追问"]</textarea>
+      <label class="toggle"><input id="useExtra" type="checkbox" /> 附加上下文</label>
+      <textarea id="extra" rows="3" placeholder="其他需要注入的上下文……"></textarea>
+    </aside>
+    <section class="panel conversation">
+      <div class="panel-title"><div><h2>对话测试</h2><p id="metrics">0 轮对话</p></div><div class="actions"><button id="exportChat" class="subtle">导出记录</button><button id="clearChat" class="danger">清空对话</button></div></div>
+      <div id="messages" class="messages"><div class="empty"><div class="empty-icon">✦</div><h3>开始测试你的角色</h3><p>配置模型和提示词，然后发送一条消息。</p></div></div>
+      <form id="chatForm" class="composer"><textarea id="userInput" rows="3" placeholder="输入你想测试的内容……（Enter 发送，Shift + Enter 换行）"></textarea><button id="sendBtn" type="submit">发送 ↗</button></form>
+    </section>
+    <aside class="panel inspector"><div class="panel-title"><h2>请求检查器</h2><button id="refreshPayload" class="subtle">刷新</button></div><p class="hint">这里展示本轮实际发送给模型的 messages，便于检查上下文注入顺序。</p><pre id="payload">发送消息后，这里会显示请求 JSON。</pre></aside>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>
