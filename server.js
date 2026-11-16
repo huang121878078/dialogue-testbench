@@ -318,7 +318,7 @@ app.post('/api/chat', async (req, res) => {
   serverLog('info', 'chat.request.received', {
     requestId,
     model: typeof model === 'string' ? model : '(missing)',
-    baseUrl: typeof baseUrl === 'string' ? baseUrl.replace(/\\?.*$/, '') : '(missing)',
+    baseUrl: typeof baseUrl === 'string' ? safeEndpointForLog(baseUrl) : '(missing)',
     messageCount: Array.isArray(messages) ? messages.length : 0,
     dynamicAnalysis,
     stream: Boolean(stream),
@@ -422,6 +422,7 @@ app.post('/api/chat', async (req, res) => {
     res.flushHeaders && res.flushHeaders();
     const event = {
       type: dynamicAnalysis ? 'analysis' : 'analysis_skipped',
+      requestId,
       analysis,
       warning: analysisWarning,
       timeContext,
@@ -455,7 +456,9 @@ app.post('/api/chat', async (req, res) => {
 });
 
 if (require.main === module) {
-  app.listen(PORT, () => console.log('Dialogue Testbench running at http://localhost:' + PORT));
+  app.listen(PORT, () => {
+    serverLog('info', 'server.started', { port: PORT, url: 'http://localhost:' + PORT });
+  });
 }
 
 module.exports = {
@@ -464,6 +467,7 @@ module.exports = {
   EMOTIONS,
   STRATEGIES,
   normalizeEndpoint,
+  safeEndpointForLog,
   parseModelJson,
   normalizeAnalysis,
   buildTimeContext,
