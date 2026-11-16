@@ -27,9 +27,14 @@ test('batch runner reports why it cannot start instead of silently returning', (
   assert.match(appSource, /测试集导入脚本未加载/);
 });
 
-test('browser cache is busted for updated frontend scripts', () => {
-  assert.match(htmlSource, /suite-utils\.js\?v=20261116-9/);
-  assert.match(htmlSource, /app\.js\?v=20261116-9/);
+test('frontend bootstrap loads versioned scripts and reports resource errors', () => {
+  assert.match(htmlSource, /const version = '20261116-10'/);
+  assert.match(htmlSource, /function loadScript\(fileName\)/);
+  assert.match(htmlSource, /loadScript\('suite-utils\.js'\)/);
+  assert.match(htmlSource, /loadScript\('app\.js'\)/);
+  assert.match(htmlSource, /bootstrap\.resource_failed/);
+  assert.match(htmlSource, /bootstrap\.runtime_error/);
+  assert.match(htmlSource, /脚本资源加载失败/);
 });
 
 test('chat UI does not submit a native form or navigate away', () => {
