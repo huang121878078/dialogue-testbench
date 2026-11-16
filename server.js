@@ -241,9 +241,10 @@ function getAllowedCharacterTopics(characterState) {
       continue;
     }
     if (!item || typeof item !== 'object') continue;
+    const hasLifecycleStatus = typeof item.status === 'string';
     const confirmed = item.confirmed === true ||
       ['emerging', 'established'].includes(item.status) ||
-      (Number.isFinite(Number(item.confidence)) && Number(item.confidence) >= 0.5);
+      (!hasLifecycleStatus && Number.isFinite(Number(item.confidence)) && Number(item.confidence) >= 0.5);
     if (confirmed) add(item);
   }
 
@@ -335,6 +336,9 @@ function normalizeCharacterContribution(value, characterState, intent) {
   const topic = typeof value.topic === 'string' ? value.topic.trim().slice(0, 80) : '';
   if (value.hasContribution !== true || !topic || !allowedTopics.has(topic)) return empty;
 
+  const stance = typeof value.stance === 'string' ? value.stance.trim().slice(0, 240) : '';
+  if (value.hasContribution !== true || !topic || !allowedTopics.has(topic) || !stance) return empty;
+
   const strength = CONTRIBUTION_STRENGTHS.has(value.strength) && value.strength !== 'none'
     ? value.strength : 'lean';
   const initiativeMove = INITIATIVE_MOVES.has(value.initiativeMove) && value.initiativeMove !== 'none'
@@ -342,7 +346,7 @@ function normalizeCharacterContribution(value, characterState, intent) {
   return {
     hasContribution: true,
     topic,
-    stance: typeof value.stance === 'string' ? value.stance.trim().slice(0, 240) : '',
+    stance,
     basis: typeof value.basis === 'string' ? value.basis.trim().slice(0, 240) : '',
     strength,
     initiative: INITIATIVE_LEVELS.has(value.initiative) ? value.initiative : 'low',
