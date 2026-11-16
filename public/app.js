@@ -100,6 +100,32 @@ function saveConfig(silent = false) {
   }
 }
 
+async function checkBackendConnection() {
+  try {
+    const response = await fetch('/api/health', {
+      method: 'GET',
+      cache: 'no-store',
+      redirect: 'manual'
+    });
+    if (response.status >= 300 && response.status < 400) {
+      throw new Error('本地 API 健康检查发生重定向（HTTP ' + response.status + '）。');
+    }
+    if (!response.ok) {
+      throw new Error('本地 API 健康检查返回 HTTP ' + response.status + '。');
+    }
+    const data = await response.json();
+    if (!data || data.ok !== true || data.name !== 'dialogue-testbench') {
+      throw new Error('当前页面响应的不是 Dialogue Testbench Node 服务。');
+    }
+    $('status').textContent = '本地服务已连接';
+    return { ok: true };
+  } catch (error) {
+    const message = '没有连接到 Dialogue Testbench Node 服务。请在项目目录运行 npm start，并访问 http://localhost:3000。当前页面：' + window.location.origin + '。详细信息：' + error.message;
+    $('status').textContent = '本地服务未连接';
+    return { ok: false, message };
+  }
+}
+
 function getClientTimeContext() {
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
   return {
@@ -188,6 +214,15 @@ async function sendMessage(text, options = {}) {
     return { content: '缺少 API Key', error: true };
   }
 
+  // Confirm the relative /api/chat route is actually served by this Node app.
+  const backend = await checkBackendConnection();
+  if (!backend.ok) {
+    const assistant = { role: 'assistant', content: backend.message, error: true };
+    history.push({ role: 'user', content: text.trim() }, assistant);
+    render();
+    return { content: backend.message, error: true };
+  }
+
   // Persist the visible settings before starting the request.
   saveConfig(true);
   busy = true;
@@ -259,16 +294,19 @@ async function sendMessage(text, options = {}) {
   return assistant;
 }
 
-$('chatForm').addEventListener('submit', event => {
-  event.preventDefault();
-  const value = $('userInput').value;
-  $('userInput').value = '';
-  sendMessage(value);
-});
+async function submitCurrentMessage() {
+  const input = $('userInput');
+  const value = input.value;
+  if (!value.trim()) return;
+  input.value = '';
+  await sendMessage(value);
+}
+
+$('sendBtn').addEventListener('click', submitCurrentMessage);
 $('userInput').addEventListener('keydown', event => {
   if (event.key === 'Enter' && !event.shiftKey) {
     event.preventDefault();
-    $('chatForm').requestSubmit();
+    submitCurrentMessage();
   }
 });
 $('saveConfig').addEventListener('click', () => saveConfig(false));
@@ -350,6 +388,12 @@ $('runSuite').addEventListener('click', async () => {
     return;
   }
 
+  const backend = await checkBackendConnection();
+  if (!backend.ok) {
+    updateRunnerStatus(backend.message);
+    return;
+  }
+
   saveConfig(true);
   runnerActive = true;
   runnerResults = [];
@@ -425,3 +469,4 @@ $('stopSuite').addEventListener('click', () => {
 loadConfig();
 saveConfig(true);
 render();
+checkBackendConnection();
