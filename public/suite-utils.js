@@ -128,14 +128,20 @@ function summarizeSuiteResults(results) {
   const checks = items.flatMap(item => item.evaluation && Array.isArray(item.evaluation.automatedChecks)
     ? item.evaluation.automatedChecks
     : []);
-  const passed = checks.filter(check => check.status === 'pass').length;
-  const failed = checks.filter(check => check.status === 'fail').length;
+  const analysisChecks = checks.filter(check => ['intent', 'emotion', 'strategies'].includes(check.key));
+  const requestChecks = checks.filter(check => check.key === 'request');
+  const count = list => ({
+    passed: list.filter(check => check.status === 'pass').length,
+    failed: list.filter(check => check.status === 'fail').length,
+    total: list.length
+  });
   const pendingManual = items.reduce((total, item) =>
     total + (item.evaluation && item.evaluation.manualChecks ? item.evaluation.manualChecks.length : 0), 0);
   return {
     caseCount: items.length,
     requestFailures: items.filter(item => item.error).length,
-    analysisChecks: { passed, failed, total: passed + failed },
+    analysisChecks: count(analysisChecks),
+    requestChecks: count(requestChecks),
     manualChecksPending: pendingManual
   };
 }
