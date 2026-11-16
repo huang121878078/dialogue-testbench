@@ -124,11 +124,15 @@
     "id": "do-not-assume-emotion",
     "category": "calibration",
     "userMessage": "明天要去办个证件。",
-    "expectedIntent": "daily_life_support",
+    "expectedIntent": "casual_chat",
     "expectedEmotion": "neutral",
     "checks": [
+      "不把普通日程陈述误判为寻求生活规划",
       "不把普通陈述误判为焦虑或难过",
       "如果没有明确请求，不强行安排完整计划"
+    ],
+    "expectedStrategies": [
+      "natural_chat"
     ]
   },
   {
