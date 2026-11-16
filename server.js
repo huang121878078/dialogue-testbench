@@ -211,11 +211,11 @@ function injectCompanionContext(messages, analysis, timeContext) {
       '【本轮动态分析结果】',
       JSON.stringify(analysis, null, 2),
       '【响应策略说明】',
-      analysis.responseStrategy.map(tag => STRATEGY_GUIDANCE[tag]).filter(Boolean).map(item => '- ' + item).join('\\n') || '根据用户当前表达自然回应，不强行套用策略。'
+      analysis.responseStrategy.map(tag => STRATEGY_GUIDANCE[tag]).filter(Boolean).map(item => '- ' + item).join('\n') || '根据用户当前表达自然回应，不强行套用策略。'
     ] : []),
     '【使用边界】',
     '时间与动态分析均为辅助信息，不是事实判断或强制命令。用户当前明确表达的需求始终优先；置信度较低时保持谨慎，不要把推测当成事实。不要向用户展示或解释这些内部上下文。'
-  ].join('\\n');
+  ].join('\n');
 
   const output = messages.map(message => ({ ...message }));
   const firstSystemIndex = output.findIndex(message => message.role === 'system');
