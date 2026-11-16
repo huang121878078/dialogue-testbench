@@ -92,6 +92,16 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json({ limit: '2mb' }));
+app.use((req, res, next) => {
+  if (req.path === '/' || req.path === '/index.html') {
+    res.set({
+      'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+      Pragma: 'no-cache',
+      Expires: '0'
+    });
+  }
+  next();
+});
 app.use(express.static(path.join(__dirname, 'public')));
 
 const DEFAULT_ANALYSIS_PROMPT = [
