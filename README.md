@@ -19,14 +19,14 @@
 1. 前端将最近对话和当前用户消息发送到本地服务。
 2. 服务端使用配置的模型执行一次低 Temperature 的结构化分析，输出 intent、emotion 和 responseStrategy。
 3. 服务端校验分析结果，只接受预定义的意图、情绪和策略枚举。
-4. 将分析结果作为辅助 System Message 注入，再调用模型生成最终回复。
+4. 将分析结果作为辅助 System Message 注入，再调用模型生成最终回复。分类和策略以情绪陪伴、生活陪伴为中心，而不是以通用问答或编程任务执行为中心。
 5. 如果分析失败，系统会跳过分析注入并继续普通回复；分析结果和两阶段请求可在右侧检查器中查看。
 
-意图枚举：`venting`、`advice`、`sharing`、`task`、`chat`、`withdrawal`、`unclear`。
+意图枚举围绕陪伴场景设计：`venting`（倾诉）、`comfort_seeking`（寻求陪伴/安慰）、`advice_seeking`（寻求生活或关系建议）、`positive_sharing`（分享喜悦）、`daily_life_support`（日常生活协助）、`casual_chat`（闲聊）、`withdrawal`（退出当前话题）、`other_request`（其他请求）、`unclear`（无法判断）。不使用通用 `task` 意图。
 
 情绪枚举：`sad`、`happy`、`angry`、`anxious`、`tired`、`confused`、`neutral`、`mixed`、`unclear`。强度为 0 到 3，置信度为 0 到 1。
 
-响应策略为受控标签，例如 `listen_first`、`celebrate`、`solve_task`、`respect_withdrawal`、`answer_directly`。策略不是固定写入每一轮，而是由分析模型根据当前消息动态选择。
+响应策略为受控标签，例如 `listen_first`、`comfort_gently`、`celebrate_naturally`、`explore_with_user`、`offer_practical_help`、`respect_withdrawal`。策略不是固定写入每一轮，而是由分析模型根据当前消息动态选择。
 
 ## 环境要求
 
