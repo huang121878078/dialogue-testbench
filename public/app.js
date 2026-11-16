@@ -6,8 +6,8 @@ function sanitizeConsoleValue(value, key = '') {
   }
   if (typeof value === 'string') {
     return value
-      .replace(/\\bBearer\\s+[^\\s"'<>]+/gi, 'Bearer [REDACTED]')
-      .replace(/([?&](?:api[_-]?key|access_token|token)=)[^&\\s]*/gi, '$1[REDACTED]');
+      .replace(/\bBearer\s+[^\s"'<>]+/gi, 'Bearer [REDACTED]')
+      .replace(/([?&](?:api[_-]?key|access_token|token)=)[^&\s]*/gi, '$1[REDACTED]');
   }
   if (Array.isArray(value)) return value.map(item => sanitizeConsoleValue(item));
   if (value && typeof value === 'object') {
