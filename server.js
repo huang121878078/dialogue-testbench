@@ -334,8 +334,6 @@ function normalizeCharacterContribution(value, characterState, intent) {
 
   const allowedTopics = getAllowedCharacterTopics(characterState);
   const topic = typeof value.topic === 'string' ? value.topic.trim().slice(0, 80) : '';
-  if (value.hasContribution !== true || !topic || !allowedTopics.has(topic)) return empty;
-
   const stance = typeof value.stance === 'string' ? value.stance.trim().slice(0, 240) : '';
   if (value.hasContribution !== true || !topic || !allowedTopics.has(topic) || !stance) return empty;
 
