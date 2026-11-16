@@ -133,5 +133,6 @@ test('default companion prompt template is versioned and keeps role layers disti
   assert.match(appSource, /CURRENT_PROMPT_TEMPLATE_VERSION = 3/);
   assert.match(appSource, /兴趣种子（seed）只是探索方向/);
   assert.match(appSource, /不自动附加喝水、休息或庆祝任务/);
-  assert.match(appSource, /只有 emerging\/established 或 confidence>=0\.5 的兴趣允许被引用/);
+  assert.match(appSource, /只有 emerging\/established 或 confirmed=true 的兴趣允许被引用/);
+  assert.match(appSource, /不自动附加喝水、休息或庆祝任务/);
 });
