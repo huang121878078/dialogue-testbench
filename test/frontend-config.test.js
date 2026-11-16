@@ -28,8 +28,8 @@ test('batch runner reports why it cannot start instead of silently returning', (
 });
 
 test('browser cache is busted for updated frontend scripts', () => {
-  assert.match(htmlSource, /suite-utils\.js\?v=20261116-5/);
-  assert.match(htmlSource, /app\.js\?v=20261116-5/);
+  assert.match(htmlSource, /suite-utils\.js\?v=20261116-6/);
+  assert.match(htmlSource, /app\.js\?v=20261116-6/);
 });
 
 test('chat UI does not submit a native form or navigate away', () => {
