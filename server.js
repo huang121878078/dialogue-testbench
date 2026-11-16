@@ -3,6 +3,63 @@ const path = require('path');
 
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
+
+function serverLog(level, event, details = {}) {
+  const entry = {
+    time: new Date().toISOString(),
+    event,
+    ...details
+  };
+  const line = '[DialogueTestbench] ' + JSON.stringify(entry);
+  const method = level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'info';
+  console[method](line);
+}
+
+function safeEndpointForLog(endpoint) {
+  try {
+    const url = new URL(endpoint);
+    return url.origin + url.pathname;
+  } catch {
+    return '(invalid endpoint)';
+  }
+}
+
+let requestSequence = 0;
+app.use((req, res, next) => {
+  if (!req.path.startsWith('/api/')) return next();
+
+  const requestId = Date.now().toString(36) + '-' + (++requestSequence).toString(36);
+  const startedAt = Date.now();
+  req.requestId = requestId;
+  res.setHeader('X-Request-Id', requestId);
+  serverLog('info', 'http.request.start', {
+    requestId,
+    method: req.method,
+    path: req.path
+  });
+
+  res.on('finish', () => {
+    serverLog(res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info', 'http.request.finish', {
+      requestId,
+      method: req.method,
+      path: req.path,
+      status: res.statusCode,
+      durationMs: Date.now() - startedAt
+    });
+  });
+  res.on('close', () => {
+    if (!res.writableEnded) {
+      serverLog('warn', 'http.request.client_closed', {
+        requestId,
+        method: req.method,
+        path: req.path,
+        durationMs: Date.now() - startedAt
+      });
+    }
+  });
+  next();
+});
+
 app.use(express.json({ limit: '2mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 
@@ -45,7 +102,10 @@ const STRATEGY_GUIDANCE = {
   be_concise: '控制表达长度，避免重复、堆砌修辞、过度安慰或模板化表达。'
 };
 
-app.get('/api/health', (_req, res) => res.json({ ok: true, name: 'dialogue-testbench' }));
+app.get('/api/health', (req, res) => {
+  serverLog('info', 'health.check.ok', { requestId: req.requestId });
+  res.json({ ok: true, name: 'dialogue-testbench' });
+});
 
 function normalizeEndpoint(baseUrl) {
   const normalized = String(baseUrl || '').trim().replace(/\/+$/, '');
@@ -188,8 +248,12 @@ function buildAnalysisMessages(messages, analysisPrompt, timeContext) {
   ];
 }
 
-async function runDynamicAnalysis(endpoint, apiKey, model, messages, analysisPrompt, timeContext) {
+async function runDynamicAnalysis(endpoint, apiKey, model, messages, analysisPrompt, timeContext, requestId) {
   const analysisMessages = buildAnalysisMessages(messages, analysisPrompt, timeContext);
+  const startedAt = Date.now();
+  serverLog('info', 'provider.analysis.start', {
+    requestId, model, endpoint: safeEndpointForLog(endpoint), messageCount: analysisMessages.length
+  });
   const response = await fetch(endpoint, {
     method: 'POST',
     redirect: 'manual',
@@ -198,16 +262,29 @@ async function runDynamicAnalysis(endpoint, apiKey, model, messages, analysisPro
   });
   if (response.status >= 300 && response.status < 400) {
     const location = response.headers.get('location') || '(响应未提供 Location)';
+    serverLog('warn', 'provider.analysis.redirect', {
+      requestId, status: response.status, endpoint: safeEndpointForLog(endpoint), location,
+      durationMs: Date.now() - startedAt
+    });
     const detail = await response.text().catch(() => '');
     throw new Error('分析接口返回 HTTP ' + response.status + ' 重定向到 ' + location + '。服务端已停止自动跳转，以避免 POST 请求或鉴权信息丢失。' + (detail ? ' ' + detail.slice(0, 500) : ''));
   }
   if (!response.ok) {
+    serverLog('error', 'provider.analysis.http_error', {
+      requestId, status: response.status, endpoint: safeEndpointForLog(endpoint),
+      durationMs: Date.now() - startedAt
+    });
     const detail = await response.text();
     throw new Error('分析请求返回 ' + response.status + ': ' + detail.slice(0, 1200));
   }
   const data = await response.json();
   const content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
-  return { analysis: normalizeAnalysis(parseModelJson(content)), analysisMessages };
+  const analysis = normalizeAnalysis(parseModelJson(content));
+  serverLog('info', 'provider.analysis.success', {
+    requestId, status: response.status, durationMs: Date.now() - startedAt,
+    intent: analysis.userIntent.type, emotion: analysis.userEmotion.type
+  });
+  return { analysis, analysisMessages };
 }
 
 function injectCompanionContext(messages, analysis, timeContext) {
@@ -233,16 +310,34 @@ function injectCompanionContext(messages, analysis, timeContext) {
 }
 
 app.post('/api/chat', async (req, res) => {
+  const requestId = req.requestId;
+  const requestStartedAt = Date.now();
   const body = req.body || {};
   const { baseUrl, apiKey, model, messages, temperature = 0.7, stream = true } = body;
   const dynamicAnalysis = body.dynamicAnalysis !== false;
+  serverLog('info', 'chat.request.received', {
+    requestId,
+    model: typeof model === 'string' ? model : '(missing)',
+    baseUrl: typeof baseUrl === 'string' ? baseUrl.replace(/\\?.*$/, '') : '(missing)',
+    messageCount: Array.isArray(messages) ? messages.length : 0,
+    dynamicAnalysis,
+    stream: Boolean(stream),
+    hasApiKey: Boolean(apiKey)
+  });
   if (!baseUrl || !apiKey || !model || !Array.isArray(messages)) {
+    serverLog('warn', 'chat.request.validation_failed', { requestId });
     return res.status(400).json({ error: '请填写 API Base URL、API Key、模型名称，并提供 messages。' });
   }
 
   let endpoint;
   try { endpoint = normalizeEndpoint(baseUrl); }
-  catch { return res.status(400).json({ error: 'API Base URL 格式不正确。' }); }
+  catch (error) {
+    serverLog('warn', 'chat.request.invalid_base_url', { requestId, message: error.message });
+    return res.status(400).json({ error: 'API Base URL 格式不正确。' });
+  }
+  serverLog('info', 'chat.request.endpoint_resolved', {
+    requestId, endpoint: safeEndpointForLog(endpoint), model
+  });
 
   const numericTemperature = Number(temperature);
   const safeTemperature = Number.isFinite(numericTemperature) ? Math.max(0, Math.min(2, numericTemperature)) : 0.7;
@@ -254,10 +349,13 @@ app.post('/api/chat', async (req, res) => {
 
   if (dynamicAnalysis) {
     try {
-      const result = await runDynamicAnalysis(endpoint, apiKey, model, messages, analysisPrompt, timeContext);
+      const result = await runDynamicAnalysis(endpoint, apiKey, model, messages, analysisPrompt, timeContext, requestId);
       analysis = result.analysis;
       analysisMessages = result.analysisMessages;
     } catch (error) {
+      serverLog('error', 'provider.analysis.failed', {
+        requestId, message: error.message, durationMs: Date.now() - requestStartedAt
+      });
       analysisWarning = '动态分析失败，已跳过上下文注入并继续生成回复：' + error.message.slice(0, 1000);
     }
   }
@@ -266,6 +364,11 @@ app.post('/api/chat', async (req, res) => {
   const responseRequest = { model, temperature: safeTemperature, stream: Boolean(stream), messages: responseMessages };
 
   try {
+    serverLog('info', 'provider.completion.start', {
+      requestId, model, endpoint: safeEndpointForLog(endpoint),
+      stream: Boolean(stream), messageCount: responseMessages.length
+    });
+    const providerStartedAt = Date.now();
     const upstream = await fetch(endpoint, {
       method: 'POST',
       redirect: 'manual',
@@ -274,6 +377,10 @@ app.post('/api/chat', async (req, res) => {
     });
     if (upstream.status >= 300 && upstream.status < 400) {
       const location = upstream.headers.get('location') || '(响应未提供 Location)';
+      serverLog('error', 'provider.completion.redirect', {
+        requestId, status: upstream.status, endpoint: safeEndpointForLog(endpoint), location,
+        durationMs: Date.now() - providerStartedAt
+      });
       const detail = await upstream.text().catch(() => '');
       return res.status(502).json({
         error: '模型接口返回了 HTTP ' + upstream.status + ' 重定向，服务端已停止自动跳转。',
@@ -283,12 +390,20 @@ app.post('/api/chat', async (req, res) => {
       });
     }
     if (!upstream.ok) {
+      serverLog('error', 'provider.completion.http_error', {
+        requestId, status: upstream.status, endpoint: safeEndpointForLog(endpoint),
+        durationMs: Date.now() - providerStartedAt
+      });
       const detail = await upstream.text();
       return res.status(upstream.status).json({ error: '模型服务返回 ' + upstream.status, detail: '请求地址：' + endpoint + '\n' + detail.slice(0, 6000), analysis, analysisWarning });
     }
 
     if (!stream) {
       const data = await upstream.json();
+      serverLog('info', 'provider.completion.success', {
+        requestId, status: upstream.status, durationMs: Date.now() - providerStartedAt,
+        totalDurationMs: Date.now() - requestStartedAt, usage: data.usage || null
+      });
       return res.json({
         content: data.choices && data.choices[0] && data.choices[0].message ? getMessageText(data.choices[0].message.content) : '',
         usage: data.usage || null,
@@ -300,6 +415,9 @@ app.post('/api/chat', async (req, res) => {
     }
 
     res.status(200);
+    serverLog('info', 'provider.completion.stream_started', {
+      requestId, status: upstream.status, headersDurationMs: Date.now() - providerStartedAt
+    });
     res.set({ 'Content-Type': 'text/event-stream; charset=utf-8', 'Cache-Control': 'no-cache, no-transform', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' });
     res.flushHeaders && res.flushHeaders();
     const event = {
@@ -311,12 +429,27 @@ app.post('/api/chat', async (req, res) => {
       responseRequest
     };
     res.write('data: ' + JSON.stringify(event) + '\n\n');
+    let streamedChunks = 0;
+    let streamedBytes = 0;
     if (upstream.body) {
-      for await (const chunk of upstream.body) res.write(chunk);
+      for await (const chunk of upstream.body) {
+        streamedChunks += 1;
+        streamedBytes += chunk.byteLength || chunk.length || 0;
+        res.write(chunk);
+      }
     }
     res.end();
+    serverLog('info', 'provider.completion.stream_finished', {
+      requestId, streamedChunks, streamedBytes,
+      providerDurationMs: Date.now() - providerStartedAt,
+      totalDurationMs: Date.now() - requestStartedAt
+    });
   } catch (error) {
-    if (!res.headersSent) res.status(502).json({ error: '连接模型服务失败', detail: error.message });
+    serverLog('error', 'chat.request.unhandled_error', {
+      requestId, name: error.name, message: error.message,
+      totalDurationMs: Date.now() - requestStartedAt
+    });
+    if (!res.headersSent) res.status(502).json({ error: '连接模型服务失败', detail: error.message, requestId });
     else res.end();
   }
 });
