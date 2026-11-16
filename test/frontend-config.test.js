@@ -49,5 +49,6 @@ test('chat and batch requests verify the local Node API before calling the model
 test('provider requests do not silently follow 3xx redirects', () => {
   assert.equal((serverSource.match(/redirect: 'manual'/g) || []).length, 2);
   assert.match(serverSource, /重定向地址：/);
-  assert.match(serverSource, /HTTP '\s*\+ upstream\.status/);
+  assert.match(serverSource, /模型接口返回了 HTTP/);
+  assert.match(serverSource, /upstream\.headers\.get\('location'\)/);
 });
