@@ -1,0 +1,63 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const {
+  normalizeEndpoint,
+  parseModelJson,
+  normalizeAnalysis,
+  buildTimeContext,
+  injectCompanionContext
+} = require('../server');
+
+test('normalizes OpenAI-compatible endpoints without duplicating chat path', () => {
+  assert.equal(normalizeEndpoint('https://example.com/v1'), 'https://example.com/v1/chat/completions');
+  assert.equal(normalizeEndpoint('https://example.com/v1/chat/completions/'), 'https://example.com/v1/chat/completions');
+});
+
+test('parses plain and fenced JSON model output', () => {
+  assert.deepEqual(parseModelJson('{"ok":true}'), { ok: true });
+  assert.deepEqual(parseModelJson('```json\n{"ok":true}\n```'), { ok: true });
+});
+
+test('normalizes analysis into controlled intent, emotion and strategy enums', () => {
+  const result = normalizeAnalysis({
+    userIntent: { type: 'not-a-real-intent', confidence: 0.99, evidence: 'x'.repeat(200) },
+    userEmotion: { type: 'sad', intensity: 9, confidence: 0.8 },
+    responseStrategy: ['listen_first', 'invented_strategy', 'listen_first', 'be_concise']
+  });
+  assert.equal(result.userIntent.type, 'unclear');
+  assert.equal(result.userIntent.evidence.length, 160);
+  assert.equal(result.userEmotion.type, 'sad');
+  assert.equal(result.userEmotion.intensity, 3);
+  assert.deepEqual(result.responseStrategy, ['listen_first', 'be_concise']);
+});
+
+test('time context uses the supplied IANA timezone and stable local fields', () => {
+  const result = buildTimeContext({
+    timestamp: '2026-11-16T10:00:00.000Z',
+    timeZone: 'Asia/Singapore'
+  });
+  assert.equal(result.localTime, '18:00');
+  assert.equal(result.dayPeriod, '傍晚/晚间');
+  assert.equal(result.timeZone, 'Asia/Singapore');
+});
+
+test('invalid timezone safely falls back to UTC', () => {
+  const result = buildTimeContext({
+    timestamp: '2026-11-16T10:00:00.000Z',
+    timeZone: 'Not/A-Timezone'
+  });
+  assert.equal(result.timeZone, 'UTC');
+  assert.equal(result.localTime, '10:00');
+});
+
+test('companion context is injected as auxiliary system context', () => {
+  const messages = [{ role: 'system', content: 'persona' }, { role: 'user', content: 'hello' }];
+  const output = injectCompanionContext(messages, null, {
+    date: '2026-11-16', weekday: '星期一', localTime: '18:00',
+    timeZone: 'Asia/Singapore', dayPeriod: '傍晚/晚间', timestamp: '2026-11-16T10:00:00.000Z'
+  });
+  assert.equal(output[0].content, 'persona');
+  assert.equal(output[1].role, 'system');
+  assert.match(output[1].content, /当前时间与生活节奏/);
+  assert.equal(output[2].content, 'hello');
+});
