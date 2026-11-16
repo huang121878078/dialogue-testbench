@@ -65,7 +65,7 @@ npm install
 npm start
 ```
 
-打开 <http://localhost:3000> 后，默认已填入阿里云百炼兼容接口 `https://dashscope.aliyuncs.com/compatible-mode/v1` 和模型 `qwen-flash`，只需填写自己的 API Key 即可开始测试。也可以自行修改 Base URL 和模型。配置会在字段失焦及发送请求前自动保存到当前浏览器；点击“保存配置”仍可手动保存。服务端会自动补上 `/chat/completions`。
+必须通过项目自带的 Node 服务运行，不能直接双击 `public/index.html`，也不能仅用 VS Code Live Server 或 GitHub Pages 打开页面（这些方式没有 `/api/chat` 后端）。在项目根目录执行 `npm install`（首次运行）和 `npm start`，然后打开 <http://localhost:3000>。页面顶部显示“本地服务已连接”后，才表示前端正确连上了 Node 后端。默认已填入阿里云百炼兼容接口 `https://dashscope.aliyuncs.com/compatible-mode/v1` 和模型 `qwen-flash`，只需填写自己的 API Key 即可开始测试。也可以自行修改 Base URL 和模型。配置会在字段失焦及发送请求前自动保存到当前浏览器；点击“保存配置”仍可手动保存。服务端会自动补上 `/chat/completions`。
 
 开发模式：
 
@@ -109,3 +109,10 @@ JSON 支持两种格式：
 - 使用对象包装：`{ "version": 1, "name": "测试集名称", "cases": [...] }`
 
 每道题至少提供 `userMessage` 或 `prompt`。可选字段包括 `id`、`title`、`category`、`expectedIntent`、`expectedEmotion`、`expectedStrategies`、`checks` 和 `timeContext`。其中 `timeContext` 必须同时提供有效的 `timestamp` 与 `timeZone`，用于可重复地测试深夜、傍晚等时间场景；导入后会保留并实际传给服务端，不会回退到运行时当前时间。执行结果会记录 `timeContext` 和 `expectedStrategies`。注意：`checks` 仍是评估提示，不会自动判定模型是否通过；当前版本先收集回复与分析结果，尚未接入自动评分模型。
+
+
+### 运行方式与接口重定向排查
+
+- 页面通过同源路径 `/api/health` 检查 Node 服务，通过 `/api/chat` 请求模型。若页面不是由本项目的 Express 服务提供，发送与批量测试会显示后端连接错误，不会把表单提交到当前页面造成跳转。
+- 服务端对 DashScope POST 请求采用手动重定向处理。若上游返回 301/302/307/308，会显示实际请求地址与 `Location`，不会自动跟随后造成 POST 方法或鉴权信息丢失。
+- 百炼 Base URL 必须与 API Key 所属地域匹配。本文默认地址是北京地域/旧版兼容域名；新加坡地域应按百炼控制台和官方文档配置对应地域的专属域名。不要仅根据浏览器所在地推断 API Key 地域。
