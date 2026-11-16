@@ -1,3 +1,4 @@
+(function exposeDialogueSuiteUtils(root) {
 function normalizeImportedSuite(data) {
   const cases = Array.isArray(data) ? data : data && data.cases;
   if (!Array.isArray(cases) || cases.length === 0) {
@@ -54,11 +55,12 @@ function normalizeImportedSuite(data) {
   };
 }
 
-const DialogueSuiteUtils = { normalizeImportedSuite };
+const api = { normalizeImportedSuite };
 
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = DialogueSuiteUtils;
+  module.exports = api;
 }
-if (typeof window !== 'undefined') {
-  window.DialogueSuiteUtils = DialogueSuiteUtils;
+if (root && typeof root === 'object') {
+  root.DialogueSuiteUtils = api;
 }
+})(typeof globalThis !== 'undefined' ? globalThis : this);
