@@ -58,7 +58,85 @@
       <pre id="payload">发送消息后，这里会显示实际请求 JSON。</pre>
     </aside>
   </main>
-  <script src="suite-utils.js?v=20261116-9" onerror="console.error('[DialogueTestbench] suite-utils.js 加载失败'); document.getElementById('status').textContent='测试集工具脚本加载失败';"></script>
-  <script src="app.js?v=20261116-9" onerror="console.error('[DialogueTestbench] app.js 加载失败'); document.getElementById('status').textContent='前端脚本加载失败';"></script>
+  <script>
+    (function () {
+      const status = document.getElementById('status');
+      const version = '20261116-10';
+      const startedAt = Date.now();
+
+      function setStatus(message) {
+        if (status) status.textContent = message;
+      }
+
+      console.info('[DialogueTestbench] bootstrap.started', {
+        time: new Date().toISOString(),
+        page: window.location.href,
+        origin: window.location.origin
+      });
+      setStatus('正在加载前端脚本…');
+
+      window.addEventListener('error', function (event) {
+        if (event.target && event.target.tagName === 'SCRIPT') {
+          const src = event.target.src || '(unknown script)';
+          console.error('[DialogueTestbench] bootstrap.resource_error', {
+            resource: src,
+            time: new Date().toISOString()
+          });
+          setStatus('脚本资源加载失败：' + (src.includes('suite-utils') ? 'suite-utils.js' : 'app.js'));
+          return;
+        }
+
+        console.error('[DialogueTestbench] bootstrap.runtime_error', {
+          message: event.message,
+          source: event.filename,
+          line: event.lineno,
+          column: event.colno,
+          stack: event.error && event.error.stack
+        });
+        setStatus('前端脚本执行错误，请查看 F12 Console');
+      }, true);
+
+      window.addEventListener('unhandledrejection', function (event) {
+        console.error('[DialogueTestbench] bootstrap.unhandled_rejection', event.reason);
+        setStatus('前端异步执行错误，请查看 F12 Console');
+      });
+
+      function loadScript(fileName) {
+        return new Promise(function (resolve, reject) {
+          const script = document.createElement('script');
+          const src = '/' + fileName + '?v=' + version;
+          script.src = src;
+          script.onload = function () {
+            console.info('[DialogueTestbench] bootstrap.resource_loaded', {
+              resource: src,
+              durationMs: Date.now() - startedAt
+            });
+            resolve();
+          };
+          script.onerror = function () {
+            const error = new Error('无法加载 ' + src + '。请检查服务器是否已重启，以及该文件是否存在于 public 目录。');
+            console.error('[DialogueTestbench] bootstrap.resource_failed', error);
+            setStatus('脚本资源加载失败：' + fileName);
+            reject(error);
+          };
+          document.body.appendChild(script);
+        });
+      }
+
+      loadScript('suite-utils.js')
+        .then(function () { return loadScript('app.js'); })
+        .then(function () {
+          console.info('[DialogueTestbench] bootstrap.completed', {
+            durationMs: Date.now() - startedAt
+          });
+          if (status && status.textContent === '正在加载前端脚本…') {
+            setStatus('脚本已下载，但应用未完成初始化；请查看 F12 Console');
+          }
+        })
+        .catch(function (error) {
+          console.error('[DialogueTestbench] bootstrap.failed', error);
+        });
+    })();
+  </script>
 </body>
 </html>
