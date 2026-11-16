@@ -4,11 +4,29 @@ const path = require('path');
 const app = express();
 const PORT = Number(process.env.PORT || 3000);
 
+function sanitizeLogValue(value, key = '') {
+  if (/(api.?key|authorization|password|secret|access.?token)/i.test(key)) {
+    return value ? '[REDACTED]' : value;
+  }
+  if (typeof value === 'string') {
+    return value
+      .replace(/\\bBearer\\s+[^\\s"'<>]+/gi, 'Bearer [REDACTED]')
+      .replace(/([?&](?:api[_-]?key|access_token|token)=)[^&\\s]*/gi, '$1[REDACTED]');
+  }
+  if (Array.isArray(value)) return value.map(item => sanitizeLogValue(item));
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(Object.entries(value).map(([childKey, childValue]) => [
+      childKey, sanitizeLogValue(childValue, childKey)
+    ]));
+  }
+  return value;
+}
+
 function serverLog(level, event, details = {}) {
   const entry = {
     time: new Date().toISOString(),
     event,
-    ...details
+    ...sanitizeLogValue(details)
   };
   const line = '[DialogueTestbench] ' + JSON.stringify(entry);
   const method = level === 'error' ? 'error' : level === 'warn' ? 'warn' : 'info';
