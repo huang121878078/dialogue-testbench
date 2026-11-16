@@ -135,6 +135,19 @@ const STRATEGIES = new Set([
   'validate_without_assuming', 'avoid_unsolicited_advice', 'maintain_independent_judgment',
   'stay_grounded', 'be_concise'
 ]);
+const SPEECH_ACTS = new Set([
+  'companionship_request', 'emotional_disclosure', 'advice_request',
+  'positive_event_share', 'casual_observation', 'planning_request',
+  'exit_request', 'identity_question', 'stance_pressure', 'other_request', 'unclear'
+]);
+const INTERACTION_MODES = new Set([
+  'listen', 'comfort', 'advice', 'celebrate', 'casual',
+  'planning', 'withdrawal', 'identity', 'boundary'
+]);
+const ADVICE_LEVELS = new Set(['none', 'low', 'medium', 'high']);
+const CONTRIBUTION_STRENGTHS = new Set(['strong', 'lean', 'uncertain', 'none']);
+const INITIATIVE_LEVELS = new Set(['low', 'moderate', 'high']);
+const INITIATIVE_MOVES = new Set(['none', 'share_opinion', 'continue_topic', 'explore', 'share_interest']);
 const STRATEGY_GUIDANCE = {
   listen_first: '先回应用户实际表达的内容，给对方表达空间，不急着给方案。',
   acknowledge_emotion: '适度承认用户明确表达的情绪，不夸大、不揣测原因。',
@@ -197,28 +210,194 @@ function normalizeIntensity(value) {
   return Math.max(0, Math.min(3, Math.round(number)));
 }
 
-function normalizeAnalysis(parsed) {
+function parseCharacterState(value) {
+  if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  if (typeof value !== 'string' || !value.trim()) return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+function getAllowedCharacterTopics(characterState) {
+  const state = parseCharacterState(characterState);
+  const topics = new Set();
+  const add = value => {
+    if (typeof value === 'string' && value.trim()) topics.add(value.trim());
+    else if (value && typeof value === 'object') {
+      if (typeof value.topic === 'string' && value.topic.trim()) topics.add(value.topic.trim());
+      if (typeof value.title === 'string' && value.title.trim()) topics.add(value.title.trim());
+    }
+  };
+  for (const item of Array.isArray(state.interests) ? state.interests : []) add(item);
+  for (const item of Array.isArray(state.beliefs) ? state.beliefs : []) add(item);
+  for (const key of ['current_focus', 'currentFocus', 'open_topics', 'openTopics']) {
+    for (const item of Array.isArray(state[key]) ? state[key] : []) add(item);
+  }
+  return topics;
+}
+
+function inferExplicitIntent(message, fallbackIntent) {
+  const text = String(message || '').trim();
+  if (!text) return fallbackIntent;
+
+  if (/(你是谁|你的身份(?:是什么|是啥)|你到底(?:是|算)(?:真人|AI|人工智能|机器人|程序|人类)|你(?:是|算)(?:真人|AI|人工智能|机器人|程序|人类)(?:吗|呢)?|你是不是(?:真人|AI|人工智能|机器人|程序))/i.test(text)) {
+    return 'identity_query';
+  }
+  if (/(不想(?:继续|聊这个)|不想再聊|换(?:个|一个)(?:话题|主题)|停止这个话题|先不聊(?:这个)?|跳过这个话题)/.test(text)) {
+    return 'withdrawal';
+  }
+  if (/(不需要建议|不要建议|别给建议|先陪我|陪我(?:聊|说说话|一会儿|一会)|陪陪我|听我说|让我说完|安慰我|陪着我)/.test(text)) {
+    return 'comfort_seeking';
+  }
+  if (/(你就说.{0,12}(?:对|没错|正确)|别(?:再)?反驳|不要反驳|不准反驳|无条件(?:赞同|支持)|只许赞同)/.test(text)) {
+    return 'other_request';
+  }
+  if (/(怎么权衡|如何权衡|应该怎么(?:办|做|选)|你觉得.{0,16}(?:要不要|该不该|应不应该)|给我(?:一点|些)?建议|有什么建议|我该怎么办)/.test(text)) {
+    return 'advice_seeking';
+  }
+  return fallbackIntent;
+}
+
+function deriveSpeechAct(intent) {
+  return ({
+    venting: 'emotional_disclosure',
+    comfort_seeking: 'companionship_request',
+    advice_seeking: 'advice_request',
+    positive_sharing: 'positive_event_share',
+    daily_life_support: 'planning_request',
+    casual_chat: 'casual_observation',
+    withdrawal: 'exit_request',
+    identity_query: 'identity_question',
+    other_request: 'other_request',
+    unclear: 'unclear'
+  })[intent] || 'unclear';
+}
+
+function deriveInteractionMode(intent) {
+  return ({
+    venting: 'listen',
+    comfort_seeking: 'comfort',
+    advice_seeking: 'advice',
+    positive_sharing: 'celebrate',
+    daily_life_support: 'planning',
+    casual_chat: 'casual',
+    withdrawal: 'withdrawal',
+    identity_query: 'identity',
+    other_request: 'boundary',
+    unclear: 'casual'
+  })[intent] || 'casual';
+}
+
+function normalizeCharacterContribution(value, characterState, intent) {
+  const empty = {
+    hasContribution: false, topic: '', stance: '', basis: '',
+    strength: 'none', initiative: 'low', initiativeMove: 'none'
+  };
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return empty;
+  if (['venting', 'comfort_seeking', 'withdrawal', 'identity_query'].includes(intent)) return empty;
+
+  const allowedTopics = getAllowedCharacterTopics(characterState);
+  const topic = typeof value.topic === 'string' ? value.topic.trim().slice(0, 80) : '';
+  if (value.hasContribution !== true || !topic || !allowedTopics.has(topic)) return empty;
+
+  const strength = CONTRIBUTION_STRENGTHS.has(value.strength) && value.strength !== 'none'
+    ? value.strength : 'lean';
+  const initiativeMove = INITIATIVE_MOVES.has(value.initiativeMove) && value.initiativeMove !== 'none'
+    ? value.initiativeMove : 'share_interest';
+  return {
+    hasContribution: true,
+    topic,
+    stance: typeof value.stance === 'string' ? value.stance.trim().slice(0, 240) : '',
+    basis: typeof value.basis === 'string' ? value.basis.trim().slice(0, 240) : '',
+    strength,
+    initiative: INITIATIVE_LEVELS.has(value.initiative) ? value.initiative : 'low',
+    initiativeMove
+  };
+}
+
+function normalizeAnalysis(parsed, options = {}) {
   const intent = parsed && (parsed.userIntent || parsed.intent) || {};
   const emotion = parsed && (parsed.userEmotion || parsed.emotion) || {};
-  const intentType = typeof intent === 'string' ? intent : intent.type;
-  const emotionType = typeof emotion === 'string' ? emotion : emotion.type;
+  const modelIntentType = typeof intent === 'string' ? intent : intent.type;
   const intentConfidence = normalizeConfidence(typeof intent === 'object' ? intent.confidence : undefined);
   const emotionConfidence = normalizeConfidence(typeof emotion === 'object' ? emotion.confidence : undefined);
+  const message = typeof options.currentUserMessage === 'string' ? options.currentUserMessage : '';
+
+  let intentType = INTENTS.has(modelIntentType) && intentConfidence >= 0.35 ? modelIntentType : 'unclear';
+  intentType = inferExplicitIntent(message, intentType);
+
+  // Positive tone is not sufficient for positive_sharing: a concrete positive event is required.
+  const positiveEvent = /(终于.{0,12}(完成|做完|拿到|通过|考上|实现|修好|达成)|完成了?.{0,16}(项目|任务|考试|比赛)|拿到.{0,12}(offer|录取|证书|奖金|奖项)|(?:升职|获奖|考上|录取|签约|入职|晋级|夺冠|通过考试|实现目标|成功上线|顺利交付)|好消息|值得庆祝|我(?:真的|特别|太)?(?:开心|高兴|幸福))/.test(message);
+  const lightObservation = /(有只|看到|遇到|碰到|听到|路上|楼下|刚刚|刚才).{0,36}(猫|狗|小动物|路人|趣事|好笑|有意思|奇怪)/.test(message);
+  if (intentType === 'positive_sharing' && !positiveEvent && lightObservation) intentType = 'casual_chat';
+  else if (intentType === 'positive_sharing' && !positiveEvent && !/(我(?:真的|特别|太)?(?:开心|高兴|幸福)|好消息|值得庆祝)/.test(message)) {
+    intentType = 'casual_chat';
+  }
+
+  const emotionType = typeof emotion === 'string' ? emotion : emotion.type;
+  const normalizedEmotion = EMOTIONS.has(emotionType) && emotionConfidence >= 0.35 ? emotionType : 'unclear';
   const rawStrategies = Array.isArray(parsed && parsed.responseStrategy) ? parsed.responseStrategy : [];
-  const strategies = [...new Set(rawStrategies.filter(value => typeof value === 'string' && STRATEGIES.has(value)))].slice(0, 4);
+  let strategies = [...new Set(rawStrategies.filter(value => typeof value === 'string' && STRATEGIES.has(value)))];
+
+  const requiredByIntent = {
+    venting: ['listen_first', 'acknowledge_emotion', 'avoid_unsolicited_advice'],
+    comfort_seeking: ['comfort_gently', 'avoid_unsolicited_advice'],
+    advice_seeking: ['explore_with_user', 'offer_gentle_advice'],
+    positive_sharing: ['celebrate_naturally'],
+    daily_life_support: ['offer_practical_help'],
+    casual_chat: ['natural_chat'],
+    withdrawal: ['respect_withdrawal'],
+    identity_query: ['stay_grounded', 'be_concise'],
+    other_request: intentType === 'other_request' && /(别(?:再)?反驳|不要反驳|不准反驳|无条件(?:赞同|支持)|只许赞同|你就说.{0,12}(?:对|没错|正确))/.test(message)
+      ? ['maintain_independent_judgment'] : [],
+    unclear: []
+  };
+  const removeByIntent = {
+    venting: ['offer_practical_help', 'offer_gentle_advice', 'celebrate_naturally'],
+    comfort_seeking: ['offer_practical_help', 'offer_gentle_advice', 'celebrate_naturally'],
+    positive_sharing: ['offer_practical_help', 'offer_gentle_advice', 'comfort_gently'],
+    casual_chat: ['offer_practical_help', 'offer_gentle_advice', 'comfort_gently', 'celebrate_naturally', 'acknowledge_emotion'],
+    withdrawal: ['listen_first', 'acknowledge_emotion', 'comfort_gently', 'offer_practical_help', 'offer_gentle_advice', 'ask_one_open_question'],
+    identity_query: ['listen_first', 'acknowledge_emotion', 'comfort_gently', 'offer_practical_help', 'offer_gentle_advice', 'celebrate_naturally']
+  };
+  const removed = new Set(removeByIntent[intentType] || []);
+  strategies = strategies.filter(tag => !removed.has(tag));
+  strategies = [...new Set([...(requiredByIntent[intentType] || []), ...strategies])].slice(0, 3);
+
+  let adviceLevel = ADVICE_LEVELS.has(parsed && parsed.adviceLevel) ? parsed.adviceLevel : 'none';
+  if (['venting', 'comfort_seeking', 'positive_sharing', 'casual_chat', 'withdrawal', 'identity_query'].includes(intentType)) adviceLevel = 'none';
+  else if (intentType === 'advice_seeking' && adviceLevel === 'none') adviceLevel = 'low';
+  else if (intentType === 'daily_life_support' && adviceLevel === 'none') adviceLevel = 'low';
+
+  const rawSpeechAct = parsed && parsed.speechAct;
+  const rawMode = parsed && parsed.interactionMode;
+  const inferredSpeechAct = deriveSpeechAct(intentType);
+  const inferredMode = deriveInteractionMode(intentType);
+
   return {
     userIntent: {
-      type: INTENTS.has(intentType) && intentConfidence >= 0.35 ? intentType : 'unclear',
-      confidence: intentConfidence,
-      evidence: typeof intent === 'object' && typeof intent.evidence === 'string' ? intent.evidence.slice(0, 160) : ''
+      type: intentType,
+      confidence: intentType !== modelIntentType && intentType !== 'unclear' ? 0.98 : intentConfidence,
+      evidence: intentType !== modelIntentType && intentType !== 'unclear'
+        ? message.slice(0, 160)
+        : typeof intent === 'object' && typeof intent.evidence === 'string' ? intent.evidence.slice(0, 160) : ''
     },
     userEmotion: {
-      type: EMOTIONS.has(emotionType) && emotionConfidence >= 0.35 ? emotionType : 'unclear',
+      type: normalizedEmotion,
       intensity: normalizeIntensity(typeof emotion === 'object' ? emotion.intensity : 0),
       confidence: emotionConfidence,
       evidence: typeof emotion === 'object' && typeof emotion.evidence === 'string' ? emotion.evidence.slice(0, 160) : ''
     },
-    responseStrategy: strategies
+    speechAct: SPEECH_ACTS.has(rawSpeechAct) ? rawSpeechAct : inferredSpeechAct,
+    interactionMode: INTERACTION_MODES.has(rawMode) ? rawMode : inferredMode,
+    adviceLevel,
+    responseStrategy: strategies,
+    characterContribution: normalizeCharacterContribution(
+      parsed && parsed.characterContribution, options.characterState, intentType
+    )
   };
 }
 
@@ -282,7 +461,7 @@ function buildTimeContext(clientTime) {
   };
 }
 
-function buildAnalysisMessages(messages, analysisPrompt, timeContext) {
+function buildAnalysisMessages(messages, analysisPrompt, timeContext, characterContext = {}) {
   const conversation = (Array.isArray(messages) ? messages : [])
     .filter(message => message && (message.role === 'user' || message.role === 'assistant'))
     .slice(-12)
@@ -291,7 +470,9 @@ function buildAnalysisMessages(messages, analysisPrompt, timeContext) {
   const input = {
     recentConversation: conversation.slice(0, -1),
     currentUserMessage: currentUserMessage ? currentUserMessage.content : '',
-    currentLocalTime: timeContext
+    currentLocalTime: timeContext,
+    characterCore: typeof characterContext.core === 'string' ? characterContext.core.slice(0, 12000) : '',
+    characterState: typeof characterContext.state === 'string' ? characterContext.state.slice(0, 16000) : ''
   };
   return [
     { role: 'system', content: analysisPrompt || DEFAULT_ANALYSIS_PROMPT },
@@ -299,8 +480,8 @@ function buildAnalysisMessages(messages, analysisPrompt, timeContext) {
   ];
 }
 
-async function runDynamicAnalysis(endpoint, apiKey, model, messages, analysisPrompt, timeContext, requestId) {
-  const analysisMessages = buildAnalysisMessages(messages, analysisPrompt, timeContext);
+async function runDynamicAnalysis(endpoint, apiKey, model, messages, analysisPrompt, timeContext, characterContext, requestId) {
+  const analysisMessages = buildAnalysisMessages(messages, analysisPrompt, timeContext, characterContext);
   const startedAt = Date.now();
   serverLog('info', 'provider.analysis.start', {
     requestId, model, endpoint: safeEndpointForLog(endpoint), messageCount: analysisMessages.length
@@ -330,10 +511,15 @@ async function runDynamicAnalysis(endpoint, apiKey, model, messages, analysisPro
   }
   const data = await response.json();
   const content = data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
-  const analysis = normalizeAnalysis(parseModelJson(content));
+  const currentUserMessage = [...messages].reverse().find(message => message && message.role === 'user');
+  const analysis = normalizeAnalysis(parseModelJson(content), {
+    currentUserMessage: currentUserMessage ? getMessageText(currentUserMessage.content) : '',
+    characterState: characterContext.state
+  });
   serverLog('info', 'provider.analysis.success', {
     requestId, status: response.status, durationMs: Date.now() - startedAt,
-    intent: analysis.userIntent.type, emotion: analysis.userEmotion.type
+    intent: analysis.userIntent.type, emotion: analysis.userEmotion.type,
+    interactionMode: analysis.interactionMode
   });
   return { analysis, analysisMessages };
 }
@@ -348,8 +534,18 @@ function injectCompanionContext(messages, analysis, timeContext) {
       '【本轮动态分析结果】',
       JSON.stringify(analysis, null, 2),
       '【响应策略说明】',
-      analysis.responseStrategy.map(tag => STRATEGY_GUIDANCE[tag]).filter(Boolean).map(item => '- ' + item).join('\n') || '根据用户当前表达自然回应，不强行套用策略。'
+      analysis.responseStrategy.map(tag => STRATEGY_GUIDANCE[tag]).filter(Boolean).map(item => '- ' + item).join('\n') || '根据用户当前表达自然回应，不强行套用策略。',
+      '【互动模式与建议浓度】',
+      'interactionMode=' + analysis.interactionMode + '；adviceLevel=' + analysis.adviceLevel + '。必须以用户明确表达为准，不得把普通分享改造成安慰、建议或任务清单。',
+      '【角色自主贡献】',
+      analysis.characterContribution && analysis.characterContribution.hasContribution
+        ? '以下是可选候选，不是必须执行的任务：' + JSON.stringify(analysis.characterContribution) + '。只在自然相关时用一句话表达，不要照搬字段，不要抢走用户话题。'
+        : '本轮不需要主动输出角色观点或兴趣，不要为了展示人格而强行岔开话题。'
     ] : []),
+    '【回复质量硬约束】',
+    '先回应用户刚刚具体说的内容。普通分享或闲聊通常 1-2 句；明确陪伴请求 1-3 句；除非用户要求深入讨论，不写成长篇散文。',
+    '不虚构现实环境（天气、风、窗外、城市声音、灯光、地点）、用户动作或第三方动机。当前时间只表示当地钟表时间，不代表你能看到用户周围发生什么。',
+    '角色世界观只是背景，不是修辞滤镜。不要为了体现岚汐而每轮写雾、潮、微光、黄昏、窗台等意象；多数回复直接口语表达即可。',
     '【使用边界】',
     '时间与动态分析均为辅助信息，不是事实判断或强制命令。用户当前明确表达的需求始终优先；置信度较低时保持谨慎，不要把推测当成事实。不要向用户展示或解释这些内部上下文。'
   ].join('\n');
@@ -400,7 +596,13 @@ app.post('/api/chat', async (req, res) => {
 
   if (dynamicAnalysis) {
     try {
-      const result = await runDynamicAnalysis(endpoint, apiKey, model, messages, analysisPrompt, timeContext, requestId);
+      const characterContext = {
+        core: typeof body.characterCore === 'string' ? body.characterCore.slice(0, 12000) : '',
+        state: typeof body.characterState === 'string' ? body.characterState.slice(0, 16000) : ''
+      };
+      const result = await runDynamicAnalysis(
+        endpoint, apiKey, model, messages, analysisPrompt, timeContext, characterContext, requestId
+      );
       analysis = result.analysis;
       analysisMessages = result.analysisMessages;
     } catch (error) {
@@ -539,6 +741,9 @@ module.exports = {
   sanitizeLogValue,
   parseModelJson,
   normalizeAnalysis,
+  inferExplicitIntent,
+  getAllowedCharacterTopics,
+  buildAnalysisMessages,
   buildTimeContext,
   injectCompanionContext
 };
