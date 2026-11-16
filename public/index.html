@@ -17,26 +17,34 @@
       <label>模型名称<input id="model" placeholder="gpt-4o-mini" /></label>
       <label>Temperature <span id="tempValue">0.7</span><input id="temperature" type="range" min="0" max="2" step="0.1" value="0.7" /></label>
       <div class="divider"></div>
-      <h2>提示词与上下文</h2>
+      <h2>角色 Prompt</h2>
       <label>System Prompt<textarea id="systemPrompt" rows="7" placeholder="定义 AI 的核心行为规则……"></textarea></label>
       <label>角色设定<textarea id="persona" rows="4" placeholder="定义角色的稳定人格、表达习惯……"></textarea></label>
       <div class="divider"></div>
-      <h2>动态上下文注入</h2>
-      <label class="toggle"><input id="useIntent" type="checkbox" checked /> 用户意图</label>
-      <textarea id="intent" rows="2">倾诉</textarea>
-      <label class="toggle"><input id="useEmotion" type="checkbox" checked /> 用户情绪</label>
-      <textarea id="emotion" rows="3">{"type":"难过","intensity":2,"confidence":0.9}</textarea>
-      <label class="toggle"><input id="useStrategy" type="checkbox" checked /> 响应策略</label>
-      <textarea id="strategy" rows="4">["先回应用户明确表达的难过","暂时不急于提供解决方案","自然倾听，不连续追问"]</textarea>
+      <h2>动态分析配置</h2>
+      <label class="toggle"><input id="useDynamicAnalysis" type="checkbox" checked /> 每轮自动分析意图、情绪和响应策略</label>
+      <p class="hint">启用后，每轮先调用当前模型进行分析，再将结构化结果注入角色 Prompt。分析和回复使用同一个模型配置。</p>
+      <label>动态分析 Prompt<textarea id="analysisPrompt" rows="12" placeholder="定义意图、情绪和响应策略的识别规则……"></textarea></label>
+      <div class="divider"></div>
+      <h2>其他上下文</h2>
       <label class="toggle"><input id="useExtra" type="checkbox" /> 附加上下文</label>
-      <textarea id="extra" rows="3" placeholder="其他需要注入的上下文……"></textarea>
+      <textarea id="extra" rows="4" placeholder="其他需要注入的上下文……"></textarea>
     </aside>
     <section class="panel conversation">
       <div class="panel-title"><div><h2>对话测试</h2><p id="metrics">0 轮对话</p></div><div class="actions"><button id="exportChat" class="subtle">导出记录</button><button id="clearChat" class="danger">清空对话</button></div></div>
       <div id="messages" class="messages"><div class="empty"><div class="empty-icon">✦</div><h3>开始测试你的角色</h3><p>配置模型和提示词，然后发送一条消息。</p></div></div>
       <form id="chatForm" class="composer"><textarea id="userInput" rows="3" placeholder="输入你想测试的内容……（Enter 发送，Shift + Enter 换行）"></textarea><button id="sendBtn" type="submit">发送 ↗</button></form>
     </section>
-    <aside class="panel inspector"><div class="panel-title"><h2>请求检查器</h2><button id="refreshPayload" class="subtle">刷新</button></div><p class="hint">这里展示本轮实际发送给模型的 messages，便于检查上下文注入顺序。</p><pre id="payload">发送消息后，这里会显示请求 JSON。</pre></aside>
+    <aside class="panel inspector">
+      <div class="panel-title"><h2>动态分析与请求检查</h2><button id="refreshPayload" class="subtle">刷新</button></div>
+      <h3 class="section-subtitle">本轮动态分析结果</h3>
+      <div id="analysisStatus" class="analysis-status">等待下一轮对话</div>
+      <pre id="analysisResult">发送消息后显示意图、情绪和响应策略分析结果。</pre>
+      <div class="divider"></div>
+      <h3 class="section-subtitle">实际发送给模型的请求</h3>
+      <p class="hint">动态分析开启时会展示分析请求和回复请求；回复请求包含本轮实际注入的动态上下文。</p>
+      <pre id="payload">发送消息后，这里会显示实际请求 JSON。</pre>
+    </aside>
   </main>
   <script src="/app.js"></script>
 </body>
