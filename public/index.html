@@ -12,9 +12,10 @@
   <main class="layout">
     <aside class="panel config">
       <div class="panel-title"><h2>模型配置</h2><button id="saveConfig" class="subtle">保存配置</button></div>
-      <label>API Base URL<input id="baseUrl" placeholder="https://api.openai.com/v1" /></label>
-      <label>API Key<input id="apiKey" type="password" placeholder="sk-..." autocomplete="off" /></label>
-      <label>模型名称<input id="model" placeholder="gpt-4o-mini" /></label>
+      <label>API Base URL<input id="baseUrl" value="https://dashscope.aliyuncs.com/compatible-mode/v1" placeholder="https://dashscope.aliyuncs.com/compatible-mode/v1" /></label>
+      <label>API Key<input id="apiKey" type="password" placeholder="填写阿里云百炼 API Key" autocomplete="off" /></label>
+      <p class="hint">已预设阿里云百炼 OpenAI 兼容接口和 qwen-flash。API Key 需要你自行填写；配置会自动保存在当前浏览器。</p>
+      <label>模型名称<input id="model" value="qwen-flash" placeholder="qwen-flash" /></label>
       <label>Temperature <span id="tempValue">0.7</span><input id="temperature" type="range" min="0" max="2" step="0.1" value="0.7" /></label>
       <div class="divider"></div>
       <div class="panel-title"><h2>默认陪伴角色</h2><button id="resetCompanionDefaults" class="subtle">恢复默认模板</button></div><p class="hint">默认角色：岚汐 · 非人类旅居者。系统规则与角色设定均可自行修改。</p>
@@ -57,7 +58,7 @@
       <pre id="payload">发送消息后，这里会显示实际请求 JSON。</pre>
     </aside>
   </main>
-  <script src="/suite-utils.js"></script>
-  <script src="/app.js"></script>
+  <script src="/suite-utils.js?v=20261116-2"></script>
+  <script src="/app.js?v=20261116-2"></script>
 </body>
 </html>
