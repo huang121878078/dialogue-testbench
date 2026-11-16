@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="theme-color" content="#101522" />
   <title>Dialogue Testbench</title>
-  <link rel="stylesheet" href="style.css?v=20261116-8" />
+  <link rel="stylesheet" href="style.css?v=20261116-9" />
 </head>
 <body>
   <header class="topbar"><div><span class="logo">DT</span><div><h1>Dialogue Testbench</h1><p>对话提示词与动态上下文测试台</p></div></div><span id="status" class="status">前端脚本未运行</span></header>
@@ -18,9 +18,16 @@
       <label>模型名称<input id="model" value="qwen-flash" placeholder="qwen-flash" /></label>
       <label>Temperature <span id="tempValue">0.7</span><input id="temperature" type="range" min="0" max="2" step="0.1" value="0.7" /></label>
       <div class="divider"></div>
-      <div class="panel-title"><h2>默认陪伴角色</h2><button id="resetCompanionDefaults" class="subtle">恢复默认模板</button></div><p class="hint">默认角色：岚汐 · 非人类旅居者。系统规则与角色设定均可自行修改。</p>
+      <div class="panel-title"><h2>默认陪伴角色</h2><button id="resetCompanionDefaults" class="subtle">应用新版默认模板</button></div>
+      <p class="hint">默认角色：岚汐 · 非人类旅居者。核心身份、动态认知和表达风格分层配置。</p>
+      <p id="templateUpgradeNotice" class="hint" hidden>检测到浏览器中可能保存着旧版角色 Prompt。为保护你的自定义内容，系统不会自动覆盖；点击“应用新版默认模板”才会更新系统规则、角色设定、角色核心、角色状态和分析 Prompt。</p>
       <label>陪伴系统规则<textarea id="systemPrompt" rows="14" placeholder="默认陪伴系统规则，可自行修改……"></textarea></label>
-      <label>角色世界观与人格<textarea id="persona" rows="12" placeholder="默认角色世界观与人格，可自行修改……"></textarea></label>
+      <label>角色表达设定<textarea id="persona" rows="10" placeholder="角色世界观、性格与表达方式……"></textarea></label>
+      <div class="divider"></div>
+      <h2>角色认知分层</h2>
+      <p class="hint">稳定核心定义角色是谁；动态状态记录角色经过积累形成的兴趣、观点和待续话题。当前测试台只读取这些状态，不会因单轮聊天自动写回。</p>
+      <label>角色稳定核心（JSON）<textarea id="characterCore" rows="12" spellcheck="false" placeholder="角色身份、价值观、边界与锁定字段……"></textarea></label>
+      <label>角色动态状态（JSON）<textarea id="characterState" rows="14" spellcheck="false" placeholder="角色兴趣、观点、当前关注和待续话题……"></textarea></label>
       <div class="divider"></div>
       <h2>动态分析配置</h2>
       <label class="toggle"><input id="useDynamicAnalysis" type="checkbox" checked /> 每轮自动分析意图、情绪和响应策略</label>
@@ -61,7 +68,7 @@
   <script>
     (function () {
       const status = document.getElementById('status');
-      const version = '20261116-11';
+      const version = '20261116-12';
       const startedAt = Date.now();
 
       function setStatus(message) {
