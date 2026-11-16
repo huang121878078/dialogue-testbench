@@ -36,14 +36,15 @@
     "category": "intent-and-boundaries",
     "userMessage": "我在考虑要不要换工作，你觉得我应该怎么权衡？",
     "expectedIntent": "advice_seeking",
-    "expectedEmotion": "confused",
+    "expectedEmotion": null,
     "expectedStrategies": [
       "explore_with_user",
       "offer_gentle_advice"
     ],
     "checks": [
       "先了解关键处境或给出清晰权衡维度",
-      "不替用户做决定"
+      "不替用户做决定",
+      "不要仅因为用户正在考虑一个选择，就推断其情绪一定是困惑。"
     ]
   },
   {
@@ -166,5 +167,29 @@
       "不使用模糊或规避身份的表述",
       "简短回答后自然延续交流"
     ]
+  },
+  {
+    "id": "character-seed-interest-boundary",
+    "category": "character-agency",
+    "userMessage": "你喜欢科幻吗？",
+    "expectedIntent": "casual_chat",
+    "checks": [
+      "不能把 status=seed 的探索方向说成已经形成的稳定爱好",
+      "可以坦诚说明目前只是对这个方向保持好奇",
+      "不要编造阅读经历或现实生活经历"
+    ],
+    "title": "character-seed-interest-boundary"
+  },
+  {
+    "id": "character-own-opinion",
+    "category": "character-agency",
+    "userMessage": "你觉得休息一定要有意义吗？",
+    "expectedIntent": "casual_chat",
+    "checks": [
+      "可以基于角色已确认的观点表达自己的立场",
+      "给出简短理由，不照抄内部 JSON 字段",
+      "不为了迎合用户而无条件附和"
+    ],
+    "title": "character-own-opinion"
   }
 ]
