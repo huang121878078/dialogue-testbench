@@ -733,13 +733,15 @@ $('runSuite').addEventListener('click', async () => {
     const stopped = runnerResults.length < total;
     consoleLog('info', 'suite.run.finished', {
       completed: runnerResults.length, total, stopped,
-      failedCases: runnerResults.filter(result => result.error).length,
+      requestFailures: runnerResults.filter(result => result.error).length,
       analysisChecks: suiteSummary.analysisChecks,
       durationMs: Math.round(performance.now() - suiteStartedAt), exported: runnerResults.length > 0
     });
     const evaluationText = runnerResults.length
-      ? '分析自动校验通过 ' + suiteSummary.analysisChecks.passed + '/' +
-        suiteSummary.analysisChecks.total + ' 项；回复质量标准待人工复核。'
+      ? '分析检查：通过 ' + suiteSummary.analysisChecks.passed + '，未通过 ' +
+        suiteSummary.analysisChecks.failed + '（共 ' + suiteSummary.analysisChecks.total +
+        ' 项）；请求失败 ' + suiteSummary.requestFailures + '；回复质量待人工复核 ' +
+        suiteSummary.manualChecksPending + ' 项。'
       : '';
     updateRunnerStatus(
       (stopped ? '已停止：' : '执行结束：') +
