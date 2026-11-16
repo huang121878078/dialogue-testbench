@@ -46,6 +46,10 @@ const DEFAULT_ANALYSIS_PROMPT = [
   '只返回合法 JSON，不要 Markdown 或额外解释。格式：{"userIntent":{"type":"daily_life_support","confidence":0.9,"evidence":"用户希望一起安排日常生活"},"userEmotion":{"type":"neutral","intensity":0,"confidence":0.8,"evidence":"没有明显情绪表达"},"responseStrategy":["offer_practical_help","be_concise"]}'
 ].join('\n');
 
+const DEFAULT_CONFIG = {
+  baseUrl: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+  model: 'qwen-flash'
+};
 const fields = ['baseUrl', 'apiKey', 'model', 'temperature', 'systemPrompt', 'persona', 'useDynamicAnalysis', 'analysisPrompt', 'useExtra', 'extra'];
 let history = [];
 let lastMessages = [];
@@ -57,6 +61,10 @@ let runnerResults = [];
 const normalizeImportedSuite = window.DialogueSuiteUtils.normalizeImportedSuite;
 
 function loadConfig() {
+  // Start with working provider defaults, then overlay the user's saved values.
+  $('baseUrl').value = DEFAULT_CONFIG.baseUrl;
+  $('model').value = DEFAULT_CONFIG.model;
+
   try {
     const saved = JSON.parse(localStorage.getItem('dt-config') || '{}');
     for (const id of fields) {
@@ -65,18 +73,31 @@ function loadConfig() {
         else $(id).value = saved[id];
       }
     }
-  } catch {}
+  } catch (error) {
+    console.warn('无法读取本地配置，将使用默认配置：', error);
+  }
+
+  // An old saved empty value should not erase the provider defaults.
+  if (!$('baseUrl').value.trim()) $('baseUrl').value = DEFAULT_CONFIG.baseUrl;
+  if (!$('model').value.trim()) $('model').value = DEFAULT_CONFIG.model;
   if (!$('analysisPrompt').value.trim()) $('analysisPrompt').value = DEFAULT_ANALYSIS_PROMPT;
   if (!$('systemPrompt').value.trim()) $('systemPrompt').value = DEFAULT_SYSTEM_PROMPT;
   if (!$('persona').value.trim()) $('persona').value = DEFAULT_PERSONA;
   $('tempValue').textContent = $('temperature').value;
 }
 
-function saveConfig() {
+function saveConfig(silent = false) {
   const data = {};
   for (const id of fields) data[id] = $(id).type === 'checkbox' ? $(id).checked : $(id).value;
-  localStorage.setItem('dt-config', JSON.stringify(data));
-  $('status').textContent = '配置已保存';
+  try {
+    localStorage.setItem('dt-config', JSON.stringify(data));
+    if (!silent) $('status').textContent = '配置已保存';
+    return true;
+  } catch (error) {
+    console.error('保存配置失败：', error);
+    if (!silent) $('status').textContent = '配置保存失败，请检查浏览器存储权限';
+    return false;
+  }
 }
 
 function getClientTimeContext() {
@@ -157,11 +178,18 @@ function handleStreamData(data, assistant) {
 }
 
 async function sendMessage(text, options = {}) {
-  if (busy || !text.trim()) return;
-  if (!$('baseUrl').value.trim() || !$('apiKey').value.trim() || !$('model').value.trim()) {
-    $('status').textContent = '请先完成模型配置';
-    return;
+  if (!text || !text.trim()) return null;
+  if (busy) {
+    $('status').textContent = '上一条消息仍在处理中，请稍后再发送';
+    return { content: '', error: true };
   }
+  if (!$('baseUrl').value.trim() || !$('apiKey').value.trim() || !$('model').value.trim()) {
+    $('status').textContent = '请填写 API Key；Base URL 和模型已有默认值';
+    return { content: '缺少 API Key', error: true };
+  }
+
+  // Persist the visible settings before starting the request.
+  saveConfig(true);
   busy = true;
   $('sendBtn').disabled = true;
   $('status').textContent = $('useDynamicAnalysis').checked ? '正在分析并生成…' : '请求中…';
@@ -196,6 +224,9 @@ async function sendMessage(text, options = {}) {
     if (!response.ok) {
       const error = await response.json().catch(() => ({}));
       throw new Error(error.detail || error.error || 'HTTP ' + response.status);
+    }
+    if (!response.body || typeof response.body.getReader !== 'function') {
+      throw new Error('模型服务没有返回可读取的流式响应，请检查兼容接口配置。');
     }
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -240,7 +271,11 @@ $('userInput').addEventListener('keydown', event => {
     $('chatForm').requestSubmit();
   }
 });
-$('saveConfig').addEventListener('click', saveConfig);
+$('saveConfig').addEventListener('click', () => saveConfig(false));
+// Persist edited fields when they lose focus, and again immediately before each request.
+for (const id of fields) {
+  $(id).addEventListener('change', () => saveConfig(true));
+}
 $('resetCompanionDefaults').addEventListener('click', () => {
   $('systemPrompt').value = DEFAULT_SYSTEM_PROMPT;
   $('persona').value = DEFAULT_PERSONA;
@@ -294,11 +329,25 @@ $('importSuite').addEventListener('change', async event => {
 });
 
 $('runSuite').addEventListener('click', async () => {
-  if (!importedSuite || runnerActive || busy) return;
-  if (!$('baseUrl').value.trim() || !$('apiKey').value.trim() || !$('model').value.trim()) {
-    updateRunnerStatus('请先填写 API Base URL、API Key 和模型名称。');
+  if (!importedSuite) {
+    updateRunnerStatus('请先导入 JSON 测试集，再点击执行。');
     return;
   }
+  if (runnerActive) {
+    updateRunnerStatus('测试集正在执行，请等待完成或点击停止。');
+    return;
+  }
+  if (busy) {
+    updateRunnerStatus('当前有一条手动消息正在生成，请等待完成后再执行测试集。');
+    return;
+  }
+  if (!$('baseUrl').value.trim() || !$('apiKey').value.trim() || !$('model').value.trim()) {
+    updateRunnerStatus('请填写 API Key；Base URL 和模型已有默认值。');
+    $('status').textContent = '缺少 API Key';
+    return;
+  }
+
+  saveConfig(true);
   runnerActive = true;
   runnerResults = [];
   $('runSuite').disabled = true;
@@ -355,7 +404,12 @@ $('runSuite').addEventListener('click', async () => {
       anchor.click();
       URL.revokeObjectURL(url);
     }
-    updateRunnerStatus('执行结束：' + runnerResults.length + '/' + total + ' 题。结果 JSON 已导出。');
+    const stopped = runnerResults.length < total;
+    updateRunnerStatus(
+      (stopped ? '已停止：' : '执行结束：') +
+      runnerResults.length + '/' + total + ' 题。' +
+      (runnerResults.length ? '结果 JSON 已导出。' : '没有生成结果文件，请检查配置。')
+    );
   }
 });
 
@@ -366,4 +420,5 @@ $('stopSuite').addEventListener('click', () => {
 
 
 loadConfig();
+saveConfig(true);
 render();
