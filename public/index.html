@@ -32,6 +32,17 @@
     </aside>
     <section class="panel conversation">
       <div class="panel-title"><div><h2>对话测试</h2><p id="metrics">0 轮对话</p></div><div class="actions"><button id="exportChat" class="subtle">导出记录</button><button id="clearChat" class="danger">清空对话</button></div></div>
+      <div class="test-runner panel-title" style="flex-wrap:wrap;gap:10px;align-items:center">
+        <div><strong>批量问题测试</strong><p id="suiteName" class="hint">尚未导入测试集</p></div>
+        <div class="actions">
+          <label class="subtle" for="importSuite">导入 JSON</label>
+          <input id="importSuite" type="file" accept=".json,application/json" style="max-width:180px" />
+          <label class="toggle"><input id="isolateCases" type="checkbox" checked /> 每题独立会话</label>
+          <button id="runSuite" disabled>按顺序执行</button>
+          <button id="stopSuite" class="danger" disabled>停止</button>
+        </div>
+        <p id="runnerStatus" class="hint" style="width:100%">导入测试集后，系统会逐题发送并在完成后导出结果。</p>
+      </div>
       <div id="messages" class="messages"><div class="empty"><div class="empty-icon">✦</div><h3>开始测试你的角色</h3><p>配置模型和提示词，然后发送一条消息。</p></div></div>
       <form id="chatForm" class="composer"><textarea id="userInput" rows="3" placeholder="输入你想测试的内容……（Enter 发送，Shift + Enter 换行）"></textarea><button id="sendBtn" type="submit">发送 ↗</button></form>
     </section>
