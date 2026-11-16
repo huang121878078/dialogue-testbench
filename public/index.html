@@ -8,7 +8,7 @@
   <link rel="stylesheet" href="style.css?v=20261116-8" />
 </head>
 <body>
-  <header class="topbar"><div><span class="logo">DT</span><div><h1>Dialogue Testbench</h1><p>对话提示词与动态上下文测试台</p></div></div><span id="status" class="status">未连接</span></header>
+  <header class="topbar"><div><span class="logo">DT</span><div><h1>Dialogue Testbench</h1><p>对话提示词与动态上下文测试台</p></div></div><span id="status" class="status">前端脚本未运行</span></header>
   <main class="layout">
     <aside class="panel config">
       <div class="panel-title"><h2>模型配置</h2><button id="saveConfig" class="subtle">保存配置</button></div>
@@ -58,7 +58,7 @@
       <pre id="payload">发送消息后，这里会显示实际请求 JSON。</pre>
     </aside>
   </main>
-  <script src="suite-utils.js?v=20261116-8"></script>
-  <script src="app.js?v=20261116-8"></script>
+  <script src="suite-utils.js?v=20261116-9" onerror="console.error('[DialogueTestbench] suite-utils.js 加载失败'); document.getElementById('status').textContent='测试集工具脚本加载失败';"></script>
+  <script src="app.js?v=20261116-9" onerror="console.error('[DialogueTestbench] app.js 加载失败'); document.getElementById('status').textContent='前端脚本加载失败';"></script>
 </body>
 </html>
