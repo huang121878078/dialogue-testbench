@@ -65,7 +65,7 @@ npm install
 npm start
 ```
 
-打开 <http://localhost:3000>，填写 API Base URL、API Key 和模型名称即可开始测试。Base URL 可以填写 `https://api.openai.com/v1`，服务端会自动补上 `/chat/completions`。
+打开 <http://localhost:3000> 后，默认已填入阿里云百炼兼容接口 `https://dashscope.aliyuncs.com/compatible-mode/v1` 和模型 `qwen-flash`，只需填写自己的 API Key 即可开始测试。也可以自行修改 Base URL 和模型。配置会在字段失焦及发送请求前自动保存到当前浏览器；点击“保存配置”仍可手动保存。服务端会自动补上 `/chat/completions`。
 
 开发模式：
 
